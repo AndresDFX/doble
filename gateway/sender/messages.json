@@ -1,0 +1,59 @@
+{
+  "familia": [
+    "hola mami, ya almorzaste?",
+    "papi me llamó preguntando por ti",
+    "que vas a hacer el domingo? la abuela quiere que vayamos a verla",
+    "el carro se varó otra vez 😭",
+    "estoy en la casa de mi hermana, llego como a las 8",
+    "no me esperes a comer, voy a llegar tarde",
+    "mañana es el cumpleaños del tío, te acordaste?"
+  ],
+  "trabajo": [
+    "buenas, ya enviaste el reporte del Q2?",
+    "tenemos call con el cliente mañana a las 10am, confirmas?",
+    "necesito el acceso al repositorio nuevo, gracias",
+    "el sprint review se mueve al jueves",
+    "puedes revisar el PR cuando puedas?",
+    "te paso el link del Confluence para que revises la documentación",
+    "el deploy a staging falló, miraste los logs?"
+  ],
+  "amigos": [
+    "ey parcero qué hubo!! 🍻",
+    "no te conté lo del partido, qué desastre",
+    "vamos pa la finca este finde?",
+    "marica no creo lo que pasó ayer jajaja",
+    "estoy quebrado, otra ronda la otra semana",
+    "viste la serie esa que me recomendaste? está heavy",
+    "armemos algo el viernes, hace meses no nos vemos"
+  ],
+  "amor": [
+    "ya saliste? te extraño 💕",
+    "qué quieres comer hoy",
+    "vi una serie buenísima, la vemos juntos?",
+    "no se cuándo voy a llegar, hay mucho trafico",
+    "tequiero ❤️",
+    "duerme rico, mañana te marco temprano",
+    "amor, podemos hablar más tarde?"
+  ],
+  "propio": [
+    "recordar: llamar al banco mañana",
+    "comprar leche, pan, huevos",
+    "idea: hacer un script que limpie los logs viejos",
+    "test del agente — responde algo",
+    "nota: el deploy del proyecto X queda para el lunes"
+  ],
+  "salud": [
+    "cómo seguiste de la gripa?",
+    "el médico me dijo que tengo que hacerme exámenes",
+    "te recomiendo el doctor que me atendió, muy bueno",
+    "ya te tomaste las pastillas?",
+    "tengo dolor de cabeza horrible desde ayer"
+  ],
+  "reunion": [
+    "podemos vernos esta semana?",
+    "qué te parece almorzamos el viernes?",
+    "tienes tiempo para un café?",
+    "me llamas cuando puedas? necesito hablarte",
+    "vamos a tu casa este sábado a ver el partido"
+  ]
+}

@@ -168,6 +168,33 @@ Después de esto, ya puedes arrancar el gateway con `npm run dev`.
 
 > Limitación: WhatsApp solo sirve el historial que el servidor tenga indexado para tu dispositivo (suele ser ~6 meses para chats activos, menos para inactivos). Para volúmenes grandes, considera correr ingestor varias veces con día de diferencia mientras WhatsApp pagina.
 
+## Probar el agente con mensajes en lote (batch-send)
+
+Para no tener que escribir mensajes uno a uno desde WhatsApp A hacia el agente en B, hay un script "sender" que abre **una segunda sesión de Baileys** (en `gateway/.wa-sender-session/`, aislada de la sesión principal) y dispara mensajes pre-curados desde A:
+
+```powershell
+# en gateway/, con el gateway principal corriendo en otra terminal o Docker
+cd gateway
+
+# Vista previa sin enviar
+npm run batch-send -- --to 573243198985 --dry
+
+# Envío real: todos los temas, todos los mensajes, delay 6-15s
+npm run batch-send -- --to 573243198985
+
+# Solo familia + trabajo, máximo 3 mensajes por tema
+npm run batch-send -- --to 573243198985 --themes familia,trabajo --count 3
+
+# Más rápido (riesgoso, puede oler a bot)
+npm run batch-send -- --to 573243198985 --min-delay-ms 2000 --max-delay-ms 5000
+```
+
+Primera ejecución pide QR en la terminal — escanéalo desde **WhatsApp A** (tu número personal principal). Las siguientes ejecuciones reusan la sesión.
+
+El catálogo de mensajes vive en [gateway/sender/messages.json](gateway/sender/messages.json) — agrupado por tema (familia, trabajo, amigos, amor, propio, salud, reunion). Edítalo a tu gusto: cada tema es un array de strings, y los temas `salud` y `reunion` están pensados para probar las features de v2 (notificaciones Telegram para aprobación humana).
+
+> **Cuidado**: el script manda desde tu **WhatsApp principal** (A), no desde el secundario. Aunque Baileys imita cadencia humana, no abuses — 30 mensajes en una hora a una sola persona es plausible; 200 en 10 minutos hará que WhatsApp marque tu número.
+
 ## Etiquetas
 
 El sistema lee las **etiquetas nativas de WhatsApp** (Familia, Trabajo, Amigos, Amor) y las mapea a templates de prompt. Cada etiqueta tiene su propia `temperature` y plantilla de tono (ver `db/init.sql`).

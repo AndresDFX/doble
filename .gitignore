@@ -18,6 +18,7 @@ dist/
 
 gateway/.wa-session/
 gateway/.wa-media/
+gateway/.wa-sender-session/
 *.log
 
 .DS_Store

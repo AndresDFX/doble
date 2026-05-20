@@ -40,6 +40,11 @@ cd frontend ; npm run dev          # frontend en :5173 con HMR
 # Bootstrap RAG (one-shot, NO al mismo tiempo que el gateway)
 cd gateway ; npm run ingest-history
 
+# Batch-send: dispara mensajes en lote DESDE WhatsApp A hacia el secundario
+# usando una segunda sesión Baileys aislada en .wa-sender-session/.
+# Útil para matrices de prueba multi-tema. Catálogo en gateway/sender/messages.json.
+cd gateway ; npm run batch-send -- --to 573XXXXXXXXX --themes familia,trabajo --count 3
+
 # CLI heredado (la UI hace casi todo esto ahora, pero el CLI sigue util)
 cd gateway ; npm run cli -- state
 cd gateway ; npm run cli -- draft on
