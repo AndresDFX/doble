@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..db import conn
+from .owner import OWNER_CHAT_ID
 
 
 @dataclass
@@ -22,6 +23,7 @@ async def search(
     label: str | None,
     k_chat: int = 8,
     k_label: int = 4,
+    k_owner: int = 4,
 ) -> list[RetrievedMessage]:
     """Top-k retrieval scoped to this chat plus top-k from the label cohort.
 
@@ -76,12 +78,45 @@ async def search(
                     JOIN messages m ON m.id = e.message_id
                     WHERE e.label = %s
                       AND e.chat_id <> %s
+                      AND e.chat_id <> %s
                       AND m.from_me = TRUE
                       AND m.content IS NOT NULL
                     ORDER BY e.embedding <=> %s
                     LIMIT %s
                     """,
-                    (vec, label, chat_id, vec, k_label),
+                    (vec, label, chat_id, OWNER_CHAT_ID, vec, k_label),
+                )
+            ).fetchall()
+            for r in rows:
+                if r[0] in seen:
+                    continue
+                seen.add(r[0])
+                results.append(
+                    RetrievedMessage(
+                        message_id=r[0],
+                        chat_id=r[1],
+                        label=r[2],
+                        content=r[3],
+                        from_me=r[4],
+                        ts=r[5].isoformat(),
+                        distance=float(r[6]),
+                    )
+                )
+
+        if k_owner > 0 and chat_id != OWNER_CHAT_ID:
+            rows = await (
+                await c.execute(
+                    """
+                    SELECT m.id, m.chat_id, e.label, m.content, m.from_me, m.ts,
+                           e.embedding <=> %s AS distance
+                    FROM message_embeddings e
+                    JOIN messages m ON m.id = e.message_id
+                    WHERE e.chat_id = %s
+                      AND m.content IS NOT NULL
+                    ORDER BY e.embedding <=> %s
+                    LIMIT %s
+                    """,
+                    (vec, OWNER_CHAT_ID, vec, k_owner),
                 )
             ).fetchall()
             for r in rows:

@@ -1,4 +1,5 @@
 from ..db import conn
+from ..rag.owner import OWNER_CHAT_ID
 from ..rag.retrieval import RetrievedMessage
 
 DEFAULT_LABEL = "default"
@@ -56,12 +57,24 @@ def build_gemini_prompt(
         "Responde en una sola intervención, sin firmas, sin '— Yo', sin meta-explicaciones."
     )
 
+    owner_notes = [m for m in context if m.chat_id == OWNER_CHAT_ID]
+    chat_examples = [m for m in context if m.chat_id != OWNER_CHAT_ID]
+
+    if owner_notes:
+        system += (
+            "\n\n--- Información personal del dueño (background) ---\n"
+            "Estas son notas que el dueño grabó/escribió sobre su vida. "
+            "Úsalas como contexto factual cuando sean relevantes — NO las cites verbatim.\n"
+        )
+        for n in owner_notes[:10]:
+            system += f"- {n.content}\n"
+
     examples = []
-    for m in context[:20]:
+    for m in chat_examples[:20]:
         who = user_name if m.from_me else (chat_name or "Otro")
         examples.append(f"{who}: {m.content}")
     if examples:
-        system += "\n\n--- Historial relevante ---\n" + "\n".join(examples)
+        system += "\n\n--- Historial relevante del chat ---\n" + "\n".join(examples)
 
     user_label = sender_name or chat_name or "Otro"
     user_content = f"{user_label}: {incoming_text}"
