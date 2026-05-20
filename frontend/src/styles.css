@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: oklch(0.97 0.02 145);
+  --color-brand-500: oklch(0.66 0.18 145);
+  --color-brand-600: oklch(0.6 0.18 145);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
