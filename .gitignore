@@ -12,6 +12,9 @@ venv/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+*.egg-info/
+build/
+dist/
 
 gateway/.wa-session/
 gateway/.wa-media/
