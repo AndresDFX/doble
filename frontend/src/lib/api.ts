@@ -112,6 +112,38 @@ export type BatchSpec = {
   dry?: boolean;
 };
 
+export type RagStats = {
+  total_embeddings: number;
+  by_label: { label: string | null; embeddings: number; chats: number }[];
+  top_chats: { chat_id: string; name: string | null; label: string | null; embeddings: number }[];
+  coverage: { messages_with_content: number; embedded: number };
+};
+
+export type RagMatch = {
+  message_id: string;
+  chat_id: string;
+  label: string | null;
+  content: string;
+  from_me: boolean;
+  ts: string;
+  distance: number;
+  similarity: number;
+};
+
+export type RagRetrieveResponse = {
+  embedding_dim: number;
+  chat_label: string | null;
+  matches: RagMatch[];
+};
+
+export type RagRetrieveRequest = {
+  query: string;
+  chat_id?: string;
+  label?: string;
+  k_chat?: number;
+  k_label?: number;
+};
+
 async function http<T>(
   url: string,
   init: RequestInit = {}
@@ -199,6 +231,14 @@ export const api = {
       return http<Activity[]>(`/api/activity?${search.toString()}`);
     },
     clear: () => http<{ ok: true }>("/api/activity", { method: "DELETE" }),
+  },
+  rag: {
+    stats: () => http<RagStats>("/api/rag/stats"),
+    retrieve: (body: RagRetrieveRequest) =>
+      http<RagRetrieveResponse>("/api/rag/retrieve", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
   },
   sender: {
     status: () => http<SenderStatus>("/api/sender/status"),
