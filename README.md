@@ -6,15 +6,41 @@ Agente personal de WhatsApp con RAG. Lee tus chats existentes, aprende tu lengua
 
 ## Componentes
 
-- `gateway/` — Node.js + Baileys. Sesión de WhatsApp, recepción de mensajes, envío de respuestas.
+- `gateway/` — Node.js + Baileys + **Fastify HTTP API** (REST + SSE). Sesión de WhatsApp, recepción de mensajes, envío de respuestas, y endpoints `/api/*` que consume el frontend.
 - `ai/` — Python + FastAPI. Embeddings, retrieval RAG (pgvector), generación con **Gemini 2.5 Flash**, transcripción multimodal con el mismo modelo (sin Whisper).
+- `frontend/` — **React 19 + Vite + Tailwind v4 + TanStack Query**. Dashboard de administración: estado de servicios, gestión de chats/etiquetas, revisión de borradores, edición de prompts. Updates en tiempo real vía SSE.
 - `db/init.sql` — schema de Postgres con extensión pgvector y datos iniciales.
-- `docker-compose.yml` — Postgres con pgvector.
+- `docker-compose.yml` — stack completo: postgres + ai + gateway + frontend.
 
-## Setup (primera vez)
+## Quick start con Docker (recomendado)
+
+```powershell
+Copy-Item .env.example .env
+# editar .env y pegar tu GEMINI_API_KEY
+docker compose up -d --build
+```
+
+Una vez todos los contenedores estén healthy:
+
+- **Admin UI**: http://localhost:8080
+- Gateway API: http://localhost:3000/api/health
+- AI service: http://localhost:8000/health
+- Postgres: localhost:5432 (user `wa_agent`, pass `wa_agent_dev`)
+
+El emparejamiento de WhatsApp se hace **desde el dashboard**: la pestaña "Dashboard" muestra el QR cuando la conexión está en `connecting`. Apenas escaneas, la UI cambia a "open" en tiempo real.
+
+> Comandos útiles:
+> ```powershell
+> docker compose logs -f gateway     # ver Baileys + API en vivo
+> docker compose logs -f ai          # llamadas a Gemini + errores
+> docker compose down                # bajar todo (preserva volúmenes)
+> docker compose down -v             # bajar y borrar sesión WA + DB
+> ```
+
+## Setup local (sin Docker, dev/debug)
 
 ### 1. Requisitos
-- Docker Desktop
+- Docker Desktop (solo para Postgres)
 - Node.js 20+
 - Python 3.11+
 - Una **Gemini API key** gratuita ([aistudio.google.com](https://aistudio.google.com/apikey))
@@ -79,6 +105,16 @@ cd gateway
 npm install
 npm run dev
 ```
+
+### 6. Frontend (Vite, opcional en dev local)
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+El dev server queda en http://localhost:5173 con proxy a `http://localhost:3000` para `/api/*`. Si tu gateway no está en 3000, exporta `VITE_GATEWAY_URL=http://otra-host:puerto`.
 
 Verás un código QR en la terminal. Escanéalo desde WhatsApp -> Dispositivos vinculados.
 

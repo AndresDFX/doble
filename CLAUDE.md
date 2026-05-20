@@ -4,35 +4,43 @@ Guía para Claude Code al trabajar en este repo. **MVP v1 de uso personal** — 
 
 ## Arquitectura
 
-Dos procesos + Postgres, todos locales:
+Cuatro servicios, dockerizables, comunicados por red interna de compose:
 
-- `gateway/` (Node.js + TypeScript) — sesión WhatsApp vía Baileys, recepción/envío de mensajes, CLI de gestión. Habla HTTP al AI service.
-- `ai/` (Python + FastAPI) — pipeline RAG con **Gemini free tier** (gemini-2.5-flash + gemini-embedding-001). Endpoints: `/health`, `/respond`, `/transcribe`, `/embed-and-store`, `/ingest-history`.
+- `gateway/` (Node.js + TypeScript + **Fastify**) — sesión WhatsApp vía Baileys, pipeline de mensajes, y **HTTP API en `/api/*` + SSE en `/api/events`** que sirve al frontend. CLI heredado sigue funcionando.
+- `ai/` (Python + FastAPI) — pipeline RAG con **Gemini free tier** (gemini-2.5-flash + gemini-embedding-001). Endpoints internos: `/health`, `/respond`, `/transcribe`, `/embed-and-store`, `/ingest-history`. Solo el gateway lo llama.
+- `frontend/` (React 19 + Vite + Tailwind v4 + TanStack Query) — dashboard admin. En Docker se sirve por nginx en puerto 8080 con proxy a `/api/`. En dev local, `npm run dev` en puerto 5173.
 - `db/init.sql` — schema con pgvector. Se aplica auto al primer `docker compose up`.
 
 El gateway nunca llama Gemini directamente — siempre vía el AI service. Esto aísla el SDK de Google a un solo proceso.
+
+Event bus en el gateway (`src/events.ts`) y mirror de estado WA (`src/wa-status.ts`) son los puentes entre Baileys y la SSE: los handlers de Baileys publican; la ruta SSE consume y emite al frontend.
 
 ## Comandos habituales
 
 Usuario está en **Windows PowerShell 5.1** — `&&` NO funciona, usar `;` o comandos separados.
 
+### Stack completo via Docker (modo "normal")
+
 ```powershell
-# DB
-docker compose up -d postgres
-docker compose logs -f postgres
+docker compose up -d --build       # arranca postgres + ai + gateway + frontend
+docker compose logs -f gateway     # logs del gateway en vivo
+docker compose down                # bajar todo (mantiene volúmenes)
+```
 
-# AI service (con venv ya creado y activado)
-# Usamos run.py en vez de `uvicorn` directo: en Windows hay que setear
-# WindowsSelectorEventLoopPolicy ANTES de que uvicorn cree su loop
-# (ProactorEventLoop default no es compatible con psycopg async).
-cd ai ; python run.py
+Admin UI en http://localhost:8080. Reemparejar WhatsApp se hace ahí (no en terminal).
 
-# Gateway (otra terminal)
-cd gateway ; npm run dev               # gateway normal
-cd gateway ; npm run ingest-history    # bootstrap del RAG (NO al mismo tiempo que el gateway)
-cd gateway ; npm run typecheck
+### Dev local (solo cuando se está iterando código)
 
-# CLI de gestión
+```powershell
+docker compose up -d postgres      # solo la DB
+cd ai ; python run.py              # AI service en :8000 (venv activado)
+cd gateway ; npm run dev           # gateway en :3000 con tsx watch
+cd frontend ; npm run dev          # frontend en :5173 con HMR
+
+# Bootstrap RAG (one-shot, NO al mismo tiempo que el gateway)
+cd gateway ; npm run ingest-history
+
+# CLI heredado (la UI hace casi todo esto ahora, pero el CLI sigue util)
 cd gateway ; npm run cli -- state
 cd gateway ; npm run cli -- draft on
 cd gateway ; npm run cli -- chat label <jid> trabajo
@@ -74,3 +82,11 @@ TTS / clonación de voz · stickers con visión · resúmenes diarios · aliment
 - Retrieval dual (chat + label): [ai/app/rag/retrieval.py](ai/app/rag/retrieval.py)
 - Construcción del prompt: [ai/app/prompts/builder.py](ai/app/prompts/builder.py)
 - Schema: [db/init.sql](db/init.sql)
+- HTTP API del admin: [gateway/src/api/server.ts](gateway/src/api/server.ts) + [gateway/src/api/routes/](gateway/src/api/routes/)
+- Event bus (publica WA/mensajes/drafts): [gateway/src/events.ts](gateway/src/events.ts)
+- SSE para el frontend: [gateway/src/api/routes/events.ts](gateway/src/api/routes/events.ts)
+- Cliente API tipado del frontend: [frontend/src/lib/api.ts](frontend/src/lib/api.ts)
+- Wiring de SSE → React Query: [frontend/src/lib/useSSE.ts](frontend/src/lib/useSSE.ts) y [frontend/src/App.tsx](frontend/src/App.tsx)
+- Vistas: [frontend/src/views/](frontend/src/views/)
+- Compose stack: [docker-compose.yml](docker-compose.yml)
+- Dockerfiles: [gateway/Dockerfile](gateway/Dockerfile), [ai/Dockerfile](ai/Dockerfile), [frontend/Dockerfile](frontend/Dockerfile) + [frontend/nginx.conf](frontend/nginx.conf)
