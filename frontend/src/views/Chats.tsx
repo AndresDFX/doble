@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Chat, type Message } from "../lib/api";
 import {
   Badge,
-  Button,
   Card,
   CardBody,
   CardHeader,
