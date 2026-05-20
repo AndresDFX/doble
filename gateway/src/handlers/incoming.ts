@@ -12,6 +12,7 @@ import { aiRespond, aiTranscribe, aiEmbedAndStore } from "../ai-client.js";
 import { logger } from "../logger.js";
 import { sendText } from "./outgoing.js";
 import { bus } from "../events.js";
+import { activity } from "../activity.js";
 
 export async function handleIncoming(
   sock: WASocket,
@@ -42,6 +43,13 @@ export async function handleIncoming(
       content: extracted.text,
       ts: extracted.ts.toISOString(),
     },
+  });
+
+  activity.push({
+    kind: extracted.from_me ? "message-out" : "message-in",
+    level: "info",
+    message: `${extracted.from_me ? "→" : "←"} ${extracted.type} ${extracted.text ? `"${extracted.text.slice(0, 80)}"` : "(sin texto)"}`,
+    meta: { chat_id: extracted.chat_id, type: extracted.type, sender: extracted.sender_name },
   });
 
   if (extracted.from_me) {
@@ -97,6 +105,7 @@ export async function handleIncoming(
   }
 
   let reply: string;
+  const aiStart = Date.now();
   try {
     const result = await aiRespond({
       chat_id: extracted.chat_id,
@@ -104,8 +113,21 @@ export async function handleIncoming(
       sender_name: extracted.sender_name,
     });
     reply = result.reply;
+    activity.push({
+      kind: "ai",
+      level: "success",
+      message: `Gemini respondió en ${Date.now() - aiStart}ms`,
+      meta: { chat_id: extracted.chat_id, label: chat?.label ?? null, preview: reply.slice(0, 60) },
+    });
   } catch (err) {
+    const msg = (err as Error).message;
     logger.error({ err, chat_id: extracted.chat_id }, "AI respond failed");
+    activity.push({
+      kind: "ai",
+      level: "error",
+      message: `Gemini falló tras ${Date.now() - aiStart}ms: ${msg}`,
+      meta: { chat_id: extracted.chat_id },
+    });
     return;
   }
 
@@ -127,6 +149,12 @@ export async function handleIncoming(
         content: reply,
         created_at: new Date().toISOString(),
       },
+    });
+    activity.push({
+      kind: "draft",
+      level: "info",
+      message: `Borrador #${draftId} listo para ${chat?.name ?? extracted.chat_id}`,
+      meta: { chat_id: extracted.chat_id, label: chat?.label ?? null, preview: reply.slice(0, 80) },
     });
     return;
   }

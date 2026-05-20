@@ -9,6 +9,7 @@ import { registerLabelRoutes } from "./routes/labels.js";
 import { registerWaRoutes } from "./routes/wa.js";
 import { registerEventsRoute } from "./routes/events.js";
 import { registerHealthRoute } from "./routes/health.js";
+import { registerActivityRoute } from "./routes/activity.js";
 
 export async function startApiServer(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -21,6 +22,7 @@ export async function startApiServer(): Promise<FastifyInstance> {
   await registerDraftRoutes(app);
   await registerLabelRoutes(app);
   await registerWaRoutes(app);
+  await registerActivityRoute(app);
   await registerEventsRoute(app);
 
   app.setErrorHandler((err, req, reply) => {

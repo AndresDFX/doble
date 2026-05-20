@@ -17,6 +17,7 @@ import { logger } from "./logger.js";
 import { handleIncoming } from "./handlers/incoming.js";
 import { waStatus } from "./wa-status.js";
 import { bus } from "./events.js";
+import { activity } from "./activity.js";
 
 let currentSock: WASocket | null = null;
 
@@ -51,6 +52,7 @@ export async function startBaileys(): Promise<void> {
       qrcode.generate(qr, { small: true });
       waStatus.setQr(qr).catch((err) => logger.warn({ err }, "Failed to encode QR"));
       bus.publish({ type: "wa-status", payload: waStatus.get() });
+      activity.push({ kind: "wa", level: "info", message: "QR generado, esperando escaneo" });
     }
     if (connection === "open") {
       logger.info("WhatsApp connection open");
@@ -58,6 +60,12 @@ export async function startBaileys(): Promise<void> {
       const meName = sock.user?.name ?? null;
       waStatus.setOpen({ id: meId, name: meName });
       bus.publish({ type: "wa-status", payload: waStatus.get() });
+      activity.push({
+        kind: "wa",
+        level: "success",
+        message: `Conexión WhatsApp abierta${meName ? ` (${meName})` : ""}`,
+        meta: { id: meId },
+      });
     }
     if (connection === "close") {
       const code =
@@ -66,6 +74,12 @@ export async function startBaileys(): Promise<void> {
       logger.warn({ code, shouldReconnect }, "WhatsApp connection closed");
       waStatus.setClose(lastDisconnect?.error?.message ?? `code ${code}`);
       bus.publish({ type: "wa-status", payload: waStatus.get() });
+      activity.push({
+        kind: "wa",
+        level: shouldReconnect ? "warn" : "error",
+        message: `Conexión cerrada (code ${code}). ${shouldReconnect ? "Reintentando…" : "Sesión inválida."}`,
+        meta: { code, error: lastDisconnect?.error?.message },
+      });
       if (shouldReconnect) {
         setTimeout(() => {
           startBaileys().catch((err) =>
