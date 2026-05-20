@@ -182,6 +182,17 @@ El catálogo de mensajes vive en [gateway/sender/messages.json](gateway/sender/m
 
 > **Cuidado**: el sender manda desde tu **WhatsApp principal** (A), no desde el secundario. Aunque Baileys imita cadencia humana, no abuses — 30 mensajes en una hora a una sola persona es plausible; 200 en 10 minutos hará que WhatsApp marque tu número.
 
+## Inspeccionar el RAG
+
+La pestaña **RAG** muestra qué está pasando en la capa de embeddings + retrieval:
+
+- **Stats globales**: total de embeddings, cobertura (cuántos mensajes con contenido están embedded), número de etiquetas con material.
+- **Por etiqueta**: barras horizontales con embeddings + chats por cada etiqueta. Útil para ver si una etiqueta está sub-representada.
+- **Top chats**: tabla de los 25 chats con más embeddings (los que más material aportan al RAG).
+- **Explorador**: escribe una query hipotética, selecciona un chat (y/o override de etiqueta), ajusta `k_chat` / `k_label`, y mira qué mensajes recuperaría el agente. Cada match muestra contenido, badge de quién lo escribió, distancia coseno y similitud %. No quema una llamada a Gemini de chat — solo embedding del query.
+
+Esto es lo que destraba "¿por qué el agente está respondiendo así?" — puedes replicar el contexto que vio para cualquier draft.
+
 ## Ver actividad en vivo
 
 La pestaña **Actividad** muestra todo lo que pasa en el gateway en tiempo real:

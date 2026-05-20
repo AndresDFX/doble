@@ -88,7 +88,8 @@ TTS / clonación de voz · stickers con visión · resúmenes diarios · aliment
 
 - Pipeline de respuesta entrante: [gateway/src/handlers/incoming.ts](gateway/src/handlers/incoming.ts)
 - Generación con Gemini: [ai/app/routers/respond.py](ai/app/routers/respond.py)
-- Retrieval dual (chat + label): [ai/app/rag/retrieval.py](ai/app/rag/retrieval.py)
+- Retrieval dual (chat + label) + distance: [ai/app/rag/retrieval.py](ai/app/rag/retrieval.py)
+- Retrieval inspector (sin generación): [ai/app/routers/retrieve.py](ai/app/routers/retrieve.py)
 - Construcción del prompt: [ai/app/prompts/builder.py](ai/app/prompts/builder.py)
 - Schema: [db/init.sql](db/init.sql)
 - HTTP API del admin: [gateway/src/api/server.ts](gateway/src/api/server.ts) + [gateway/src/api/routes/](gateway/src/api/routes/)
@@ -98,6 +99,6 @@ TTS / clonación de voz · stickers con visión · resúmenes diarios · aliment
 - SSE para el frontend: [gateway/src/api/routes/events.ts](gateway/src/api/routes/events.ts)
 - Cliente API tipado del frontend: [frontend/src/lib/api.ts](frontend/src/lib/api.ts)
 - Wiring de SSE → React Query: [frontend/src/lib/useSSE.ts](frontend/src/lib/useSSE.ts) y [frontend/src/App.tsx](frontend/src/App.tsx)
-- Vistas: [frontend/src/views/](frontend/src/views/) — Dashboard, Chats, Drafts, Batch, Labels, Activity
+- Vistas: [frontend/src/views/](frontend/src/views/) — Dashboard, Chats, Drafts, Batch, Rag, Labels, Activity
 - Compose stack: [docker-compose.yml](docker-compose.yml)
 - Dockerfiles: [gateway/Dockerfile](gateway/Dockerfile), [ai/Dockerfile](ai/Dockerfile), [frontend/Dockerfile](frontend/Dockerfile) + [frontend/nginx.conf](frontend/nginx.conf)
