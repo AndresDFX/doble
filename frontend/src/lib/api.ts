@@ -58,6 +58,60 @@ export type Label = {
   chats: number;
 };
 
+export type ActivityKind =
+  | "wa"
+  | "sender"
+  | "message-in"
+  | "message-out"
+  | "draft"
+  | "ai"
+  | "batch"
+  | "system"
+  | "error";
+
+export type Activity = {
+  id: number;
+  ts: string;
+  kind: ActivityKind;
+  level: "info" | "success" | "warn" | "error";
+  message: string;
+  meta?: Record<string, unknown>;
+};
+
+export type SenderStatus = {
+  connection: "idle" | "connecting" | "open" | "close";
+  qr: string | null;
+  qrDataUrl: string | null;
+  lastError: string | null;
+  lastChangeAt: string;
+  me: { id: string | null; name: string | null };
+};
+
+export type CatalogTheme = {
+  theme: string;
+  count: number;
+  samples: string[];
+};
+
+export type BatchState = {
+  id: string | null;
+  status: "idle" | "running" | "done" | "failed";
+  total: number;
+  sent: number;
+  failed: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type BatchSpec = {
+  to: string;
+  themes?: string[];
+  count?: number;
+  minDelayMs?: number;
+  maxDelayMs?: number;
+  dry?: boolean;
+};
+
 async function http<T>(
   url: string,
   init: RequestInit = {}
@@ -136,5 +190,28 @@ export const api = {
       http<{ ok: true }>(`/api/labels/${encodeURIComponent(label)}`, {
         method: "DELETE",
       }),
+  },
+  activity: {
+    list: (limit = 200, kind?: ActivityKind) => {
+      const search = new URLSearchParams();
+      search.set("limit", String(limit));
+      if (kind) search.set("kind", kind);
+      return http<Activity[]>(`/api/activity?${search.toString()}`);
+    },
+    clear: () => http<{ ok: true }>("/api/activity", { method: "DELETE" }),
+  },
+  sender: {
+    status: () => http<SenderStatus>("/api/sender/status"),
+    connect: () => http<SenderStatus>("/api/sender/connect", { method: "POST" }),
+    disconnect: () => http<SenderStatus>("/api/sender/disconnect", { method: "POST" }),
+    purge: () => http<SenderStatus>("/api/sender/session", { method: "DELETE" }),
+    catalog: () => http<CatalogTheme[]>("/api/sender/catalog"),
+    batchState: () => http<BatchState>("/api/sender/batch"),
+    startBatch: (body: BatchSpec) =>
+      http<BatchState>("/api/sender/batch", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    abortBatch: () => http<{ aborted: boolean }>("/api/sender/batch", { method: "DELETE" }),
   },
 };
