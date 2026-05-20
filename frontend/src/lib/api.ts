@@ -144,6 +144,19 @@ export type RagRetrieveRequest = {
   k_label?: number;
 };
 
+export type OwnerNote = {
+  id: string;
+  content: string;
+  raw_media_path: string | null;
+  ts: string;
+  embedded: boolean;
+};
+
+export type TranscribeResponse = {
+  text: string;
+  raw_media_path: string;
+};
+
 async function http<T>(
   url: string,
   init: RequestInit = {}
@@ -231,6 +244,33 @@ export const api = {
       return http<Activity[]>(`/api/activity?${search.toString()}`);
     },
     clear: () => http<{ ok: true }>("/api/activity", { method: "DELETE" }),
+  },
+  ownerNotes: {
+    list: () => http<OwnerNote[]>("/api/owner-notes"),
+    transcribe: async (audio: Blob, filename: string): Promise<TranscribeResponse> => {
+      const form = new FormData();
+      form.append("file", audio, filename);
+      const res = await fetch("/api/owner-notes/transcribe", {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json() as Promise<TranscribeResponse>;
+    },
+    create: (body: { content: string; raw_media_path?: string | null }) =>
+      http<OwnerNote>("/api/owner-notes", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    update: (id: string, body: { content: string }) =>
+      http<{ ok: true }>(`/api/owner-notes/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    remove: (id: string) =>
+      http<{ ok: true }>(`/api/owner-notes/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }),
   },
   rag: {
     stats: () => http<RagStats>("/api/rag/stats"),

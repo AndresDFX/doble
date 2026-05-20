@@ -7,6 +7,7 @@ import { Labels } from "./views/Labels";
 import { ActivityView } from "./views/Activity";
 import { Batch } from "./views/Batch";
 import { Rag } from "./views/Rag";
+import { Notes } from "./views/Notes";
 import { useSSE } from "./lib/useSSE";
 import { cn } from "./lib/cn";
 import {
@@ -17,6 +18,7 @@ import {
   Activity as ActivityIcon,
   Send,
   Database,
+  Mic,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,6 +28,7 @@ const TABS = [
   { id: "drafts", label: "Borradores", icon: FileText, View: Drafts },
   { id: "batch", label: "Batch", icon: Send, View: Batch },
   { id: "rag", label: "RAG", icon: Database, View: Rag },
+  { id: "notes", label: "Notas", icon: Mic, View: Notes },
   { id: "labels", label: "Etiquetas", icon: Tag, View: Labels },
   { id: "activity", label: "Actividad", icon: ActivityIcon, View: ActivityView },
 ] as const;
