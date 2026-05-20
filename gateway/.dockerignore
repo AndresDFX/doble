@@ -1,0 +1,6 @@
+node_modules
+dist
+.wa-session
+.wa-media
+*.log
+.env
