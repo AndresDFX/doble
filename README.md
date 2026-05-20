@@ -168,32 +168,31 @@ Después de esto, ya puedes arrancar el gateway con `npm run dev`.
 
 > Limitación: WhatsApp solo sirve el historial que el servidor tenga indexado para tu dispositivo (suele ser ~6 meses para chats activos, menos para inactivos). Para volúmenes grandes, considera correr ingestor varias veces con día de diferencia mientras WhatsApp pagina.
 
-## Probar el agente con mensajes en lote (batch-send)
+## Probar el agente con mensajes en lote (Batch desde el frontend)
 
-Para no tener que escribir mensajes uno a uno desde WhatsApp A hacia el agente en B, hay un script "sender" que abre **una segunda sesión de Baileys** (en `gateway/.wa-sender-session/`, aislada de la sesión principal) y dispara mensajes pre-curados desde A:
+Para no tener que escribir mensajes uno a uno desde WhatsApp A hacia el agente en B, abre el dashboard y entra a la pestaña **Batch**:
 
-```powershell
-# en gateway/, con el gateway principal corriendo en otra terminal o Docker
-cd gateway
+1. **Sender card** (izquierda): da click en *Conectar* → aparece un QR. Escanéalo con tu **WhatsApp principal (A)**. La sesión queda persistida en el volumen `wa_session` del contenedor (o en `gateway/.wa-sender-session/` en dev local).
+2. **Disparar lote** (centro): escribe el JID o número del WhatsApp destino (B), marca los temas que quieras (familia / trabajo / amigos / amor / propio / salud / reunion), opcionalmente fija un máximo por tema y los delays mínimo/máximo entre mensajes. Activa "Vista previa" para ver el plan sin enviar.
+3. **Progreso** (panel inferior): barra en vivo, contador enviados/fallidos, botón para abortar. El detalle por mensaje sale en la pestaña **Actividad** con el filtro `Batch`.
 
-# Vista previa sin enviar
-npm run batch-send -- --to 573243198985 --dry
+El catálogo de mensajes vive en [gateway/sender/messages.json](gateway/sender/messages.json) — agrupado por tema con 5-7 mensajes cada uno. Los temas `salud` y `reunion` están pensados para probar las features de v2 (notificaciones Telegram para aprobación humana).
 
-# Envío real: todos los temas, todos los mensajes, delay 6-15s
-npm run batch-send -- --to 573243198985
+> Sigue existiendo el CLI `npm run batch-send -- --to <num>` para uso headless, pero la UI ahora es el camino principal y maneja mejor la cadena pairing/abort/reintento.
 
-# Solo familia + trabajo, máximo 3 mensajes por tema
-npm run batch-send -- --to 573243198985 --themes familia,trabajo --count 3
+> **Cuidado**: el sender manda desde tu **WhatsApp principal** (A), no desde el secundario. Aunque Baileys imita cadencia humana, no abuses — 30 mensajes en una hora a una sola persona es plausible; 200 en 10 minutos hará que WhatsApp marque tu número.
 
-# Más rápido (riesgoso, puede oler a bot)
-npm run batch-send -- --to 573243198985 --min-delay-ms 2000 --max-delay-ms 5000
-```
+## Ver actividad en vivo
 
-Primera ejecución pide QR en la terminal — escanéalo desde **WhatsApp A** (tu número personal principal). Las siguientes ejecuciones reusan la sesión.
+La pestaña **Actividad** muestra todo lo que pasa en el gateway en tiempo real:
 
-El catálogo de mensajes vive en [gateway/sender/messages.json](gateway/sender/messages.json) — agrupado por tema (familia, trabajo, amigos, amor, propio, salud, reunion). Edítalo a tu gusto: cada tema es un array de strings, y los temas `salud` y `reunion` están pensados para probar las features de v2 (notificaciones Telegram para aprobación humana).
+- Mensajes entrantes / salientes
+- Llamadas a Gemini con latencia
+- Borradores creados
+- Conexiones de WhatsApp / Sender (incluyendo errores de pairing)
+- Progreso de cada batch mensaje por mensaje
 
-> **Cuidado**: el script manda desde tu **WhatsApp principal** (A), no desde el secundario. Aunque Baileys imita cadencia humana, no abuses — 30 mensajes en una hora a una sola persona es plausible; 200 en 10 minutos hará que WhatsApp marque tu número.
+Filtra por categoría con los chips superiores o busca por texto libre. Los eventos llegan vía SSE (sin polling) y se guardan en un ring buffer de las últimas 500 entradas en memoria.
 
 ## Etiquetas
 

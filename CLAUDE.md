@@ -13,7 +13,11 @@ Cuatro servicios, dockerizables, comunicados por red interna de compose:
 
 El gateway nunca llama Gemini directamente — siempre vía el AI service. Esto aísla el SDK de Google a un solo proceso.
 
-Event bus en el gateway (`src/events.ts`) y mirror de estado WA (`src/wa-status.ts`) son los puentes entre Baileys y la SSE: los handlers de Baileys publican; la ruta SSE consume y emite al frontend.
+El gateway lleva **dos sesiones Baileys** al mismo tiempo:
+- `.wa-session/` (módulo `src/baileys.ts`): la cuenta B, el agente.
+- `.wa-sender-session/` (módulo `src/sender/session.ts`): la cuenta A, para enviar batches de prueba desde el dashboard. Manejada via `/api/sender/*`.
+
+Event bus en `src/events.ts`, mirrors de estado en `src/wa-status.ts` y `src/sender/status.ts`, y ring buffer de actividad en `src/activity.ts` son los puentes entre los hot paths y la SSE: los handlers publican; la ruta SSE consume y emite al frontend.
 
 ## Comandos habituales
 
@@ -88,10 +92,12 @@ TTS / clonación de voz · stickers con visión · resúmenes diarios · aliment
 - Construcción del prompt: [ai/app/prompts/builder.py](ai/app/prompts/builder.py)
 - Schema: [db/init.sql](db/init.sql)
 - HTTP API del admin: [gateway/src/api/server.ts](gateway/src/api/server.ts) + [gateway/src/api/routes/](gateway/src/api/routes/)
-- Event bus (publica WA/mensajes/drafts): [gateway/src/events.ts](gateway/src/events.ts)
+- Event bus (publica WA/mensajes/drafts/activity/batch): [gateway/src/events.ts](gateway/src/events.ts)
+- Ring buffer de actividad: [gateway/src/activity.ts](gateway/src/activity.ts)
+- Sender (sesión Baileys de A para batches): [gateway/src/sender/](gateway/src/sender/) — session.ts, batch.ts, status.ts, catalog.ts
 - SSE para el frontend: [gateway/src/api/routes/events.ts](gateway/src/api/routes/events.ts)
 - Cliente API tipado del frontend: [frontend/src/lib/api.ts](frontend/src/lib/api.ts)
 - Wiring de SSE → React Query: [frontend/src/lib/useSSE.ts](frontend/src/lib/useSSE.ts) y [frontend/src/App.tsx](frontend/src/App.tsx)
-- Vistas: [frontend/src/views/](frontend/src/views/)
+- Vistas: [frontend/src/views/](frontend/src/views/) — Dashboard, Chats, Drafts, Batch, Labels, Activity
 - Compose stack: [docker-compose.yml](docker-compose.yml)
 - Dockerfiles: [gateway/Dockerfile](gateway/Dockerfile), [ai/Dockerfile](ai/Dockerfile), [frontend/Dockerfile](frontend/Dockerfile) + [frontend/nginx.conf](frontend/nginx.conf)
