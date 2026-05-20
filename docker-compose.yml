@@ -18,5 +18,61 @@ services:
       retries: 10
     restart: unless-stopped
 
+  ai:
+    build:
+      context: ./ai
+      dockerfile: Dockerfile
+    container_name: wa_agent_ai
+    environment:
+      DATABASE_URL: postgresql://wa_agent:wa_agent_dev@postgres:5432/wa_agent
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY must be set}
+      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-gemini-2.5-flash}
+      GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL:-gemini-embedding-001}
+      GEMINI_EMBED_DIM: ${GEMINI_EMBED_DIM:-1536}
+      AI_SERVICE_HOST: 0.0.0.0
+      AI_SERVICE_PORT: 8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: wa_agent_gateway
+    environment:
+      DATABASE_URL: postgresql://wa_agent:wa_agent_dev@postgres:5432/wa_agent
+      AI_SERVICE_URL: http://ai:8000
+      GATEWAY_PORT: 3000
+      WA_SESSION_DIR: /app/.wa-session
+      WA_MEDIA_DIR: /app/.wa-media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    volumes:
+      - wa_session:/app/.wa-session
+      - wa_media:/app/.wa-media
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: wa_agent_frontend
+    depends_on:
+      - gateway
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  wa_session:
+  wa_media:
