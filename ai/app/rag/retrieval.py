@@ -13,6 +13,7 @@ class RetrievedMessage:
     content: str
     from_me: bool
     ts: str
+    distance: float
 
 
 async def search(
@@ -26,6 +27,8 @@ async def search(
 
     The chat-scoped slice captures conversation-specific tone; the label slice
     pulls in stylistic examples from peer chats with the same label.
+    Returned matches include cosine distance from pgvector (0 = identical,
+    2 = opposite). With L2-normalised vectors, similarity = 1 - distance/2.
     """
     vec = np.asarray(embedding, dtype=np.float32)
     seen: set[str] = set()
@@ -35,7 +38,8 @@ async def search(
         rows = await (
             await c.execute(
                 """
-                SELECT m.id, m.chat_id, e.label, m.content, m.from_me, m.ts
+                SELECT m.id, m.chat_id, e.label, m.content, m.from_me, m.ts,
+                       e.embedding <=> %s AS distance
                 FROM message_embeddings e
                 JOIN messages m ON m.id = e.message_id
                 WHERE e.chat_id = %s
@@ -43,7 +47,7 @@ async def search(
                 ORDER BY e.embedding <=> %s
                 LIMIT %s
                 """,
-                (chat_id, vec, k_chat),
+                (vec, chat_id, vec, k_chat),
             )
         ).fetchall()
         for r in rows:
@@ -58,6 +62,7 @@ async def search(
                     content=r[3],
                     from_me=r[4],
                     ts=r[5].isoformat(),
+                    distance=float(r[6]),
                 )
             )
 
@@ -65,7 +70,8 @@ async def search(
             rows = await (
                 await c.execute(
                     """
-                    SELECT m.id, m.chat_id, e.label, m.content, m.from_me, m.ts
+                    SELECT m.id, m.chat_id, e.label, m.content, m.from_me, m.ts,
+                           e.embedding <=> %s AS distance
                     FROM message_embeddings e
                     JOIN messages m ON m.id = e.message_id
                     WHERE e.label = %s
@@ -75,7 +81,7 @@ async def search(
                     ORDER BY e.embedding <=> %s
                     LIMIT %s
                     """,
-                    (label, chat_id, vec, k_label),
+                    (vec, label, chat_id, vec, k_label),
                 )
             ).fetchall()
             for r in rows:
@@ -90,6 +96,7 @@ async def search(
                         content=r[3],
                         from_me=r[4],
                         ts=r[5].isoformat(),
+                        distance=float(r[6]),
                     )
                 )
 

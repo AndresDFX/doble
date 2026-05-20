@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from .db import pool
-from .routers import health, ingest, respond, transcribe
+from .routers import health, ingest, respond, retrieve, transcribe
 
 
 @asynccontextmanager
@@ -25,4 +25,5 @@ app = FastAPI(title="wa-agent ai", lifespan=lifespan)
 app.include_router(health.router)
 app.include_router(transcribe.router)
 app.include_router(respond.router)
+app.include_router(retrieve.router)
 app.include_router(ingest.router)

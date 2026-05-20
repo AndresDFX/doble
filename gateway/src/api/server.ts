@@ -11,6 +11,7 @@ import { registerEventsRoute } from "./routes/events.js";
 import { registerHealthRoute } from "./routes/health.js";
 import { registerActivityRoute } from "./routes/activity.js";
 import { registerSenderRoutes } from "./routes/sender.js";
+import { registerRagRoutes } from "./routes/rag.js";
 
 export async function startApiServer(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -25,6 +26,7 @@ export async function startApiServer(): Promise<FastifyInstance> {
   await registerWaRoutes(app);
   await registerActivityRoute(app);
   await registerSenderRoutes(app);
+  await registerRagRoutes(app);
   await registerEventsRoute(app);
 
   app.setErrorHandler((err, req, reply) => {
