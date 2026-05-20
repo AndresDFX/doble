@@ -76,7 +76,13 @@ Activación de venv en PowerShell: `.\.venv\Scripts\Activate.ps1` (NO `activate`
 
 ## Lo que NO está en v1 (diferido a v2, no proponer sin pedir)
 
-TTS / clonación de voz · stickers con visión · resúmenes diarios · alimentación de RAG por audio del dueño · notificaciones Telegram para aprobación humana · scheduler horario · multi-tenancy · Stripe · frontend web.
+TTS / clonación de voz · stickers con visión · resúmenes diarios · notificaciones Telegram para aprobación humana · scheduler horario · multi-tenancy · Stripe.
+
+(Alimentación de RAG por audio del dueño y frontend web YA están implementadas — se adelantaron del v2 original.)
+
+## Notas del dueño (owner-notes)
+
+Pseudo-chat reservado con `chat_id = '__owner__'` y `label = '__owner__'`, gestionado vía la pestaña **Notas** del dashboard. El owner graba o sube audio → Gemini transcribe → el texto se inserta como message + se embedde. `retrieval.search()` siempre pulla top-K (default 4) de este chat como contexto de fondo, independiente del chat real que disparó la respuesta. El `prompts/builder` lo renderiza en sección separada del system instruction (background factual, NO ejemplos de estilo).
 
 ## Riesgos a recordar
 
@@ -99,6 +105,7 @@ TTS / clonación de voz · stickers con visión · resúmenes diarios · aliment
 - SSE para el frontend: [gateway/src/api/routes/events.ts](gateway/src/api/routes/events.ts)
 - Cliente API tipado del frontend: [frontend/src/lib/api.ts](frontend/src/lib/api.ts)
 - Wiring de SSE → React Query: [frontend/src/lib/useSSE.ts](frontend/src/lib/useSSE.ts) y [frontend/src/App.tsx](frontend/src/App.tsx)
-- Vistas: [frontend/src/views/](frontend/src/views/) — Dashboard, Chats, Drafts, Batch, Rag, Labels, Activity
+- Vistas: [frontend/src/views/](frontend/src/views/) — Dashboard, Chats, Drafts, Batch, Rag, Notes, Labels, Activity
+- Owner notes: [ai/app/rag/owner.py](ai/app/rag/owner.py) (constantes), [gateway/src/owner.ts](gateway/src/owner.ts) + [gateway/src/api/routes/owner-notes.ts](gateway/src/api/routes/owner-notes.ts), [frontend/src/views/Notes.tsx](frontend/src/views/Notes.tsx) + [frontend/src/lib/useRecorder.ts](frontend/src/lib/useRecorder.ts)
 - Compose stack: [docker-compose.yml](docker-compose.yml)
 - Dockerfiles: [gateway/Dockerfile](gateway/Dockerfile), [ai/Dockerfile](ai/Dockerfile), [frontend/Dockerfile](frontend/Dockerfile) + [frontend/nginx.conf](frontend/nginx.conf)

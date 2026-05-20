@@ -182,6 +182,24 @@ El catálogo de mensajes vive en [gateway/sender/messages.json](gateway/sender/m
 
 > **Cuidado**: el sender manda desde tu **WhatsApp principal** (A), no desde el secundario. Aunque Baileys imita cadencia humana, no abuses — 30 mensajes en una hora a una sola persona es plausible; 200 en 10 minutos hará que WhatsApp marque tu número.
 
+## Alimentar el RAG con notas del dueño (audios o texto)
+
+Pestaña **Notas**: graba audio directamente en el navegador (botón Grabar usa `MediaRecorder`) o sube un archivo (`.ogg`/`.opus`/`.webm`/`.m4a`/`.mp3`/`.wav`). El audio se sube al gateway, se transcribe con Gemini multimodal y aparece en un textarea editable. Revisas, corriges si hace falta y das *Guardar*.
+
+Cuando guardas:
+1. El texto se persiste como un message row con `chat_id = '__owner__'` y `from_me = TRUE`.
+2. Se embedde en pgvector con `label = '__owner__'`.
+3. Retrieval lo pulla automáticamente como contexto de fondo en **todas** las respuestas (top-4 por defecto, configurable via `k_owner`).
+
+En el prompt, las notas del dueño aparecen en una sección dedicada `--- Información personal del dueño (background) ---` con instrucción de tratarlas como contexto factual, NO como ejemplos de estilo. Así sirven como memoria personal sin contaminar el tono.
+
+Ideas de cosas para grabar:
+- Hechos sobre tu vida que el agente debe saber ("mi pareja se llama X", "trabajo en Y como Z", "soy alérgico a A")
+- Preferencias de tono ("nunca uso emojis con mi jefa", "siempre cierro con 'gracias!'")
+- Contexto temporal ("este mes estoy de viaje hasta el 25")
+
+Cuando un dato cambie, edita o borra la nota — se re-embedde al editar.
+
 ## Inspeccionar el RAG
 
 La pestaña **RAG** muestra qué está pasando en la capa de embeddings + retrieval:
