@@ -22,7 +22,7 @@ docker compose up -d --build
 
 Una vez todos los contenedores estén healthy:
 
-- **Admin UI**: http://localhost:8080
+- **Admin UI**: http://localhost:8081
 - Gateway API: http://localhost:3000/api/health
 - AI service: http://localhost:8000/health
 - Postgres: localhost:5432 (user `wa_agent`, pass `wa_agent_dev`)

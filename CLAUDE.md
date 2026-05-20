@@ -8,7 +8,7 @@ Cuatro servicios, dockerizables, comunicados por red interna de compose:
 
 - `gateway/` (Node.js + TypeScript + **Fastify**) — sesión WhatsApp vía Baileys, pipeline de mensajes, y **HTTP API en `/api/*` + SSE en `/api/events`** que sirve al frontend. CLI heredado sigue funcionando.
 - `ai/` (Python + FastAPI) — pipeline RAG con **Gemini free tier** (gemini-2.5-flash + gemini-embedding-001). Endpoints internos: `/health`, `/respond`, `/transcribe`, `/embed-and-store`, `/ingest-history`. Solo el gateway lo llama.
-- `frontend/` (React 19 + Vite + Tailwind v4 + TanStack Query) — dashboard admin. En Docker se sirve por nginx en puerto 8080 con proxy a `/api/`. En dev local, `npm run dev` en puerto 5173.
+- `frontend/` (React 19 + Vite + Tailwind v4 + TanStack Query) — dashboard admin. En Docker se sirve por nginx en puerto 8081 con proxy a `/api/`. En dev local, `npm run dev` en puerto 5173.
 - `db/init.sql` — schema con pgvector. Se aplica auto al primer `docker compose up`.
 
 El gateway nunca llama Gemini directamente — siempre vía el AI service. Esto aísla el SDK de Google a un solo proceso.
@@ -27,7 +27,7 @@ docker compose logs -f gateway     # logs del gateway en vivo
 docker compose down                # bajar todo (mantiene volúmenes)
 ```
 
-Admin UI en http://localhost:8080. Reemparejar WhatsApp se hace ahí (no en terminal).
+Admin UI en http://localhost:8081. Reemparejar WhatsApp se hace ahí (no en terminal).
 
 ### Dev local (solo cuando se está iterando código)
 
