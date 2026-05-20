@@ -11,6 +11,8 @@ _EXT_TO_MIME = {
     ".opus": "audio/ogg",
     ".mp3": "audio/mp3",
     ".m4a": "audio/mp4",
+    ".mp4": "audio/mp4",
+    ".webm": "audio/webm",
     ".wav": "audio/wav",
     ".aac": "audio/aac",
     ".flac": "audio/flac",

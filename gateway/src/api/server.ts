@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { registerStateRoutes } from "./routes/state.js";
@@ -12,11 +13,15 @@ import { registerHealthRoute } from "./routes/health.js";
 import { registerActivityRoute } from "./routes/activity.js";
 import { registerSenderRoutes } from "./routes/sender.js";
 import { registerRagRoutes } from "./routes/rag.js";
+import { registerOwnerNotesRoutes } from "./routes/owner-notes.js";
 
 export async function startApiServer(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
 
   await app.register(cors, { origin: true, credentials: true });
+  await app.register(multipart, {
+    limits: { fileSize: 25 * 1024 * 1024 },
+  });
 
   await registerHealthRoute(app);
   await registerStateRoutes(app);
@@ -27,6 +32,7 @@ export async function startApiServer(): Promise<FastifyInstance> {
   await registerActivityRoute(app);
   await registerSenderRoutes(app);
   await registerRagRoutes(app);
+  await registerOwnerNotesRoutes(app);
   await registerEventsRoute(app);
 
   app.setErrorHandler((err, req, reply) => {
