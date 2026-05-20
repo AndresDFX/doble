@@ -1,6 +1,9 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY package.json ./
+# git: required because Baileys resolves a few transitive deps via git URLs
+# python3 + make + g++: occasionally needed for native modules during install
+RUN apk add --no-cache git python3 make g++
+COPY package.json package-lock.json* ./
 RUN npm install --omit=optional --no-audit --no-fund
 
 FROM node:20-alpine AS runtime
