@@ -2,6 +2,7 @@ import { startBaileys } from "./baileys.js";
 import { aiHealthcheck } from "./ai-client.js";
 import { pool } from "./db.js";
 import { logger } from "./logger.js";
+import { startApiServer } from "./api/server.js";
 
 async function main() {
   logger.info("wa-agent gateway starting");
@@ -21,6 +22,7 @@ async function main() {
     );
   }
 
+  await startApiServer();
   await startBaileys();
 }
 

@@ -11,6 +11,7 @@ import {
 import { aiRespond, aiTranscribe, aiEmbedAndStore } from "../ai-client.js";
 import { logger } from "../logger.js";
 import { sendText } from "./outgoing.js";
+import { bus } from "../events.js";
 
 export async function handleIncoming(
   sock: WASocket,
@@ -30,6 +31,17 @@ export async function handleIncoming(
     content: extracted.text,
     raw_media_path: extracted.mediaPath,
     ts: extracted.ts,
+  });
+
+  bus.publish({
+    type: "message",
+    payload: {
+      id: extracted.id,
+      chat_id: extracted.chat_id,
+      from_me: extracted.from_me,
+      content: extracted.text,
+      ts: extracted.ts.toISOString(),
+    },
   });
 
   if (extracted.from_me) {
@@ -107,6 +119,15 @@ export async function handleIncoming(
       { draftId, chat_id: extracted.chat_id, reply },
       "Draft saved (draft_mode=true)"
     );
+    bus.publish({
+      type: "draft",
+      payload: {
+        id: draftId,
+        chat_id: extracted.chat_id,
+        content: reply,
+        created_at: new Date().toISOString(),
+      },
+    });
     return;
   }
 

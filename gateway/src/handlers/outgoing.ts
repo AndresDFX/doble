@@ -2,6 +2,7 @@ import type { WASocket } from "@whiskeysockets/baileys";
 import { insertMessage } from "../db.js";
 import { aiEmbedAndStore } from "../ai-client.js";
 import { logger } from "../logger.js";
+import { bus } from "../events.js";
 
 const MIN_DELAY_MS = 2000;
 const MAX_DELAY_MS = 8000;
@@ -31,6 +32,7 @@ export async function sendText(
     return;
   }
 
+  const sentAt = new Date();
   await insertMessage({
     id: sent.key.id,
     chat_id: chatId,
@@ -38,7 +40,18 @@ export async function sendText(
     type: "text",
     content: text,
     raw_media_path: null,
-    ts: new Date(),
+    ts: sentAt,
+  });
+
+  bus.publish({
+    type: "message",
+    payload: {
+      id: sent.key.id,
+      chat_id: chatId,
+      from_me: true,
+      content: text,
+      ts: sentAt.toISOString(),
+    },
   });
 
   void aiEmbedAndStore({

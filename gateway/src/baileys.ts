@@ -15,6 +15,8 @@ import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { handleIncoming } from "./handlers/incoming.js";
+import { waStatus } from "./wa-status.js";
+import { bus } from "./events.js";
 
 let currentSock: WASocket | null = null;
 
@@ -45,17 +47,25 @@ export async function startBaileys(): Promise<void> {
   sock.ev.on("connection.update", (update) => {
     const { connection, lastDisconnect, qr } = update;
     if (qr) {
-      logger.info("Scan this QR with WhatsApp -> Linked devices");
+      logger.info("Scan this QR with WhatsApp -> Linked devices (also shown in the admin UI)");
       qrcode.generate(qr, { small: true });
+      waStatus.setQr(qr).catch((err) => logger.warn({ err }, "Failed to encode QR"));
+      bus.publish({ type: "wa-status", payload: waStatus.get() });
     }
     if (connection === "open") {
       logger.info("WhatsApp connection open");
+      const meId = sock.user?.id ?? null;
+      const meName = sock.user?.name ?? null;
+      waStatus.setOpen({ id: meId, name: meName });
+      bus.publish({ type: "wa-status", payload: waStatus.get() });
     }
     if (connection === "close") {
       const code =
         (lastDisconnect?.error as Boom)?.output?.statusCode ?? 0;
       const shouldReconnect = code !== DisconnectReason.loggedOut;
       logger.warn({ code, shouldReconnect }, "WhatsApp connection closed");
+      waStatus.setClose(lastDisconnect?.error?.message ?? `code ${code}`);
+      bus.publish({ type: "wa-status", payload: waStatus.get() });
       if (shouldReconnect) {
         setTimeout(() => {
           startBaileys().catch((err) =>
