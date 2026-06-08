@@ -222,7 +222,7 @@ function BatchForm({
               Destino (WhatsApp B: número o JID)
             </label>
             <Input
-              placeholder="573243198985"
+              placeholder="573XXXXXXXXX"
               value={to}
               onChange={(e) => setTo(e.target.value)}
             />

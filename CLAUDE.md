@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-Guía para Claude Code al trabajar en este repo. **MVP v1 de uso personal** — agente de WhatsApp con RAG. Plan completo en `C:\Users\Andre\.claude\plans\lo-primero-es-que-quiet-crystal.md`.
+Guía para Claude Code al trabajar en este repo. El proyecto se llama **Doble** ("tu doble en WhatsApp"). **MVP v1 de uso personal** — agente de WhatsApp con RAG. Plan completo en `C:\Users\Andre\.claude\plans\lo-primero-es-que-quiet-crystal.md`.
+
+> Naming: la marca es **Doble** (header del dashboard, README, `container_name` de compose, nombres de paquete). El usuario y el nombre de la DB de Postgres siguen siendo `wa_agent` a propósito — cambiarlos rompería el volumen `postgres_data` existente.
 
 ## Arquitectura
 

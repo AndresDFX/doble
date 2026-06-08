@@ -1,6 +1,8 @@
-# wa-agent (MVP v1)
+# Doble (MVP v1)
 
-Agente personal de WhatsApp con RAG. Lee tus chats existentes, aprende tu lenguaje y responde adaptando el tono según la etiqueta del chat (Familia / Trabajo / Amigos / Amor / custom).
+**Tu doble en WhatsApp.** Agente personal con RAG: lee tus chats existentes, aprende tu lenguaje y responde adaptando el tono según la etiqueta del chat (Familia / Trabajo / Amigos / Amor / custom).
+
+> El nombre interno de la base de datos y sus credenciales siguen siendo `wa_agent` por compatibilidad con volúmenes existentes; sólo es plumbing, no afecta la marca.
 
 > ⚠️ **MVP single-user, modo borrador por defecto.** El agente genera respuestas pero NO las envía automáticamente al chat hasta que desactives `draft_mode`. Plan completo en `C:\Users\Andre\.claude\plans\lo-primero-es-que-quiet-crystal.md`.
 

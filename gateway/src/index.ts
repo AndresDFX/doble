@@ -5,7 +5,7 @@ import { logger } from "./logger.js";
 import { startApiServer } from "./api/server.js";
 
 async function main() {
-  logger.info("wa-agent gateway starting");
+  logger.info("Doble gateway starting");
 
   try {
     await pool.query("SELECT 1");

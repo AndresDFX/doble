@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
         await pool.close()
 
 
-app = FastAPI(title="wa-agent ai", lifespan=lifespan)
+app = FastAPI(title="Doble AI", lifespan=lifespan)
 app.include_router(health.router)
 app.include_router(transcribe.router)
 app.include_router(respond.router)

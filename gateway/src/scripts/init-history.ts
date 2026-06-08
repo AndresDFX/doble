@@ -280,7 +280,17 @@ async function main() {
       );
     });
 
-    s.ev.on("labels.association.update", (u) => {
+    // `labels.association.update` is emitted at runtime by Baileys but is not
+    // present in the published BaileysEventMap types, so we register it through
+    // a narrowly-typed view of the emitter.
+    type LabelAssocUpdate = {
+      association: { type: string; chatId: string; labelId: string };
+      type: "add" | "remove";
+    };
+    const ev = s.ev as unknown as {
+      on(e: "labels.association.update", cb: (u: LabelAssocUpdate) => void): void;
+    };
+    ev.on("labels.association.update", (u) => {
       lastActivity = Date.now();
       if (u.association.type !== "chat") return;
       const chatId = u.association.chatId;

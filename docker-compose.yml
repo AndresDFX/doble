@@ -1,7 +1,7 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: wa_agent_postgres
+    container_name: doble_postgres
     environment:
       POSTGRES_USER: wa_agent
       POSTGRES_PASSWORD: wa_agent_dev
@@ -22,7 +22,7 @@ services:
     build:
       context: ./ai
       dockerfile: Dockerfile
-    container_name: wa_agent_ai
+    container_name: doble_ai
     environment:
       DATABASE_URL: postgresql://wa_agent:wa_agent_dev@postgres:5432/wa_agent
       GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY must be set}
@@ -42,7 +42,7 @@ services:
     build:
       context: ./gateway
       dockerfile: Dockerfile
-    container_name: wa_agent_gateway
+    container_name: doble_gateway
     environment:
       DATABASE_URL: postgresql://wa_agent:wa_agent_dev@postgres:5432/wa_agent
       AI_SERVICE_URL: http://ai:8000
@@ -65,7 +65,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: wa_agent_frontend
+    container_name: doble_frontend
     depends_on:
       - gateway
     ports:

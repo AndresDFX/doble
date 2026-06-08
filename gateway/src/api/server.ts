@@ -37,8 +37,8 @@ export async function startApiServer(): Promise<FastifyInstance> {
 
   app.setErrorHandler((err, req, reply) => {
     logger.error({ err, url: req.url, method: req.method }, "API error");
-    const status = (err as { statusCode?: number }).statusCode ?? 500;
-    reply.status(status).send({ error: err.message });
+    const e = err as { statusCode?: number; message?: string };
+    reply.status(e.statusCode ?? 500).send({ error: e.message ?? "Internal error" });
   });
 
   await app.listen({ port: config.gatewayPort, host: "0.0.0.0" });

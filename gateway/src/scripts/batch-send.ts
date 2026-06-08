@@ -5,10 +5,10 @@
  * agent against different topic profiles without typing each one.
  *
  * Usage:
- *   npm run batch-send -- --to 573243198985
- *   npm run batch-send -- --to 573243198985 --themes familia,trabajo
- *   npm run batch-send -- --to 573243198985 --themes propio --count 3
- *   npm run batch-send -- --to 573243198985 --dry
+ *   npm run batch-send -- --to 573XXXXXXXXX
+ *   npm run batch-send -- --to 573XXXXXXXXX --themes familia,trabajo
+ *   npm run batch-send -- --to 573XXXXXXXXX --themes propio --count 3
+ *   npm run batch-send -- --to 573XXXXXXXXX --dry
  *
  * Flags:
  *   --to <number_or_jid>   required: phone number (will be normalised

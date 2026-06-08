@@ -1,7 +1,7 @@
 [project]
-name = "wa-agent-ai"
+name = "doble-ai"
 version = "0.1.0"
-description = "AI service for WhatsApp agent — RAG + Gemini"
+description = "Doble — AI service for the WhatsApp agent (RAG + Gemini)"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115.0",
