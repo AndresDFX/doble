@@ -4,11 +4,13 @@
 
 > El nombre interno de la base de datos y sus credenciales siguen siendo `wa_agent` por compatibilidad con volúmenes existentes; sólo es plumbing, no afecta la marca.
 
-> ⚠️ **MVP single-user, modo borrador por defecto.** El agente genera respuestas pero NO las envía automáticamente al chat hasta que desactives `draft_mode`. Plan completo en `C:\Users\Andre\.claude\plans\lo-primero-es-que-quiet-crystal.md`.
+> ⚠️ **MVP single-user, modo borrador por defecto.** El agente genera respuestas pero NO las envía automáticamente al chat hasta que desactives `draft_mode`.
+>
+> 📦 Repo: **github.com/AndresDFX/doble** · Guía de arquitectura y convenciones para contribuir: [CLAUDE.md](CLAUDE.md).
 
 ## Componentes
 
-- `gateway/` — Node.js + Baileys + **Fastify HTTP API** (REST + SSE). Sesión de WhatsApp, recepción de mensajes, envío de respuestas, y endpoints `/api/*` que consume el frontend.
+- `gateway/` — Node.js + Baileys + **Fastify HTTP API** (REST + SSE), estructurado con **Clean Architecture** (`domain` / `application` / `infrastructure`; ver [CLAUDE.md](CLAUDE.md)). Sesión de WhatsApp, recepción de mensajes, envío de respuestas, y endpoints `/api/*` que consume el frontend.
 - `ai/` — Python + FastAPI. Embeddings, retrieval RAG (pgvector), generación con **Gemini 2.5 Flash**, transcripción multimodal con el mismo modelo (sin Whisper).
 - `frontend/` — **React 19 + Vite + Tailwind v4 + TanStack Query**. Dashboard de administración: estado de servicios, gestión de chats/etiquetas, revisión de borradores, edición de prompts. Updates en tiempo real vía SSE.
 - `db/init.sql` — schema de Postgres con extensión pgvector y datos iniciales.
@@ -250,13 +252,25 @@ WHERE label = 'trabajo';
 
 ## Estado v1 vs deferido
 
-**En v1**: WhatsApp conectado, RAG por chat + por etiqueta, templates por categoría, transcripción de audios entrantes, on/off global y por chat, modo borrador.
+**Hecho (v1+)**: WhatsApp conectado; RAG por chat + por etiqueta; templates de tono por categoría; transcripción de audios entrantes; on/off global y por chat; modo borrador; **dashboard web (React) con updates en vivo por SSE**; **notas del dueño por audio/texto que alimentan el RAG**; **inspector de RAG** (stats + explorador de retrieval); **feed de actividad en vivo**; **batch sender desde la UI** (cuenta A → agente B); **UI responsive (móvil/tablet)**; **gateway con Clean Architecture**; **publicado en GitHub**.
 
-**Diferido a v2+**: TTS / clonación de voz, stickers con visión, resúmenes diarios, alimentación de RAG por audio del dueño, notificaciones Telegram + aprobación humana, scheduler horario, multi-tenancy, Stripe, frontend web.
+**Diferido a v2+**: TTS / clonación de voz · stickers con visión · resúmenes diarios · notificaciones Telegram + aprobación humana · scheduler horario · multi-tenancy · Stripe · self-hosting (ollama + whisper.cpp + nomic-embed-text).
+
+## Próximos pasos (tareas siguientes)
+
+Cercano — sin romper las reglas de v1 (sin auth/Stripe/multi-tenancy):
+
+1. **Tests del core**: el gateway ya tiene Clean Architecture, así que los casos de uso y las reglas son testeables sin DB/Baileys. Añadir unit tests de `application/process-incoming-message`, `domain/reply-policy` y los servicios usando *fakes* de los puertos (repos en memoria).
+2. **CI en GitHub Actions**: typecheck + build de `gateway` y `frontend` en cada push (el repo ya está en GitHub).
+3. **Rotar `GEMINI_API_KEY`**: la clave actual vivió en `.env` local; rotarla en aistudio.google.com por higiene (no se publicó — está en `.gitignore`).
+4. **(Opcional) Extender Clean Architecture al servicio `ai/`** (Python): separar dominio (RAG/retrieval) de adapters (Gemini, pgvector).
+5. **(Entorno) Fuente del terminal**: fijar *MesloLGM Nerd Font* para ver los íconos del prompt (Oh My Posh ya quedó activo en el perfil de PowerShell).
+
+Más adelante (v2): ver *Diferido a v2+*. Buen primer candidato: notificaciones Telegram + aprobación humana — el catálogo de batch ya trae temas `salud`/`reunion` pensados para probarlas.
 
 ## Riesgos conocidos
 
-1. **Ban de número**: usar número secundario. Cadencia humana (delay 2–8s + "typing") ya implementada en `outgoing.ts`.
+1. **Ban de número**: usar número secundario. Cadencia humana (delay 2–8s + "typing") ya implementada en `gateway/src/infrastructure/whatsapp-gateway.ts`.
 2. **Privacidad**: todos los mensajes se envían a Google (Gemini) para embeddings/chat/STT. Self-hosting completo (ollama + whisper.cpp + nomic-embed-text) = trabajo de v2.
 3. **Respuestas inadecuadas**: por eso `draft_mode = TRUE` por defecto. Bajar a `false` solo cuando confíes en la calidad.
 4. **Cuotas Gemini free tier**: si te topas con `429 RESOURCE_EXHAUSTED`, esperar 60s y reintentar; o subir a tier de pago en aistudio.google.com.
