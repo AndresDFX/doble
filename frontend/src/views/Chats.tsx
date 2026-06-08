@@ -45,12 +45,12 @@ export function Chats() {
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Chats ({chatsQ.data?.length ?? 0})</CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <Input
               placeholder="Buscar por nombre o id"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              className="h-8 w-48 text-xs"
+              className="h-8 w-full text-xs sm:w-48"
             />
             <select
               value={labelFilter}
@@ -66,9 +66,9 @@ export function Chats() {
             </select>
           </div>
         </CardHeader>
-        <CardBody className="max-h-[70vh] overflow-y-auto p-0">
+        <CardBody className="max-h-[70vh] overflow-auto p-0">
           {chatsQ.data?.length ? (
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[34rem] text-sm">
               <thead className="sticky top-0 bg-zinc-900 text-xs text-zinc-500">
                 <tr>
                   <th className="px-3 py-2 text-left">Chat</th>

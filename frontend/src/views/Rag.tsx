@@ -146,11 +146,11 @@ function TopChatsCard({
       <CardHeader>
         <CardTitle>Chats con más material RAG</CardTitle>
       </CardHeader>
-      <CardBody className="p-0 max-h-[28rem] overflow-y-auto">
+      <CardBody className="max-h-[28rem] overflow-auto p-0">
         {rows.length === 0 ? (
           <EmptyState>Sin datos aún.</EmptyState>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[22rem] text-sm">
             <thead className="sticky top-0 bg-zinc-900 text-xs text-zinc-500">
               <tr>
                 <th className="px-3 py-2 text-left">Chat</th>
@@ -244,7 +244,7 @@ function Explorer({
               }}
             />
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div>
               <label className="mb-1 block text-xs text-zinc-400">k_chat</label>
               <Input
@@ -359,7 +359,7 @@ function MatchRow({ match: m }: { match: { message_id: string; chat_id: string; 
   const simPct = Math.round(m.similarity * 100);
   return (
     <li className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
-      <div className="mb-1 flex items-center gap-2 text-xs text-zinc-500">
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
         <Badge tone={m.from_me ? "green" : "default"}>{m.from_me ? "tú" : "otro"}</Badge>
         {m.label ? <Badge tone="blue">{m.label}</Badge> : null}
         <span className="font-mono text-[10px]">{m.chat_id}</span>

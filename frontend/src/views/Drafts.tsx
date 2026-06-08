@@ -57,7 +57,7 @@ export function Drafts() {
     <Card>
       <CardHeader>
         <CardTitle>Borradores</CardTitle>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {STATUSES.map((s) => (
             <button
               key={s}
@@ -112,12 +112,12 @@ function DraftCard({
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 p-3">
       <div className="mb-2 flex items-start justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <div className="font-medium text-zinc-200">
             {draft.chat_name ?? "(sin nombre)"}
           </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <span className="font-mono">{draft.chat_id}</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+            <span className="break-all font-mono">{draft.chat_id}</span>
             {draft.chat_label ? <Badge tone="blue">{draft.chat_label}</Badge> : null}
             <span>{new Date(draft.created_at).toLocaleString()}</span>
           </div>
@@ -149,7 +149,7 @@ function DraftCard({
       )}
 
       {draft.status === "pending" || draft.status === "approved" ? (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {editing ? (
             <>
               <Button variant="primary" size="sm" disabled={busy} onClick={() => { onSave(content); setEditing(false); }}>

@@ -86,13 +86,13 @@ export function ActivityView() {
     <Card>
       <CardHeader>
         <CardTitle>Actividad ({filtered.length})</CardTitle>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Filtrar texto…"
-            className="h-8 w-48 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100"
+            className="h-8 w-full min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100 sm:w-48 sm:flex-none"
           />
           <Button size="sm" variant="ghost" onClick={() => clear.mutate()} disabled={clear.isPending}>
             <Eraser className="h-3.5 w-3.5" /> Limpiar
@@ -152,7 +152,7 @@ function ActivityRow({ a }: { a: Activity }) {
     <li className={cn("flex items-start gap-2 rounded-md border px-2.5 py-1.5", levelTone)}>
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", m.cls)} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
           <Badge tone="default">{m.label}</Badge>
           <span>{new Date(a.ts).toLocaleTimeString()}</span>
         </div>

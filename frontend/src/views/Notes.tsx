@@ -183,7 +183,7 @@ function Capture({ onSaved }: { onSaved: () => void }) {
                 placeholder="Aquí aparecerá la transcripción…"
               />
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-zinc-500">
                 {transcript.length} caracteres
               </span>
@@ -269,7 +269,7 @@ function NoteRow({ note, onChanged }: { note: OwnerNote; onChanged: () => void }
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
-      <div className="mb-2 flex items-center gap-2 text-xs text-zinc-500">
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
         <Badge tone={note.embedded ? "green" : "amber"}>
           {note.embedded ? "embedded" : "sin embed"}
         </Badge>
@@ -285,7 +285,7 @@ function NoteRow({ note, onChanged }: { note: OwnerNote; onChanged: () => void }
             rows={4}
             className="mb-2"
           />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="primary"
               size="sm"
@@ -309,7 +309,7 @@ function NoteRow({ note, onChanged }: { note: OwnerNote; onChanged: () => void }
       ) : (
         <>
           <p className="whitespace-pre-wrap text-sm text-zinc-100">{note.content}</p>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
               <Pencil className="h-3.5 w-3.5" /> Editar
             </Button>

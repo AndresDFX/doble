@@ -131,7 +131,7 @@ function LabelEditor({
       </CardHeader>
       <CardBody className="space-y-2">
         <Textarea value={tpl} onChange={(e) => setTpl(e.target.value)} rows={4} />
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <label className="flex items-center gap-2 text-xs text-zinc-400">
             temperature
             <Input

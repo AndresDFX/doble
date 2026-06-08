@@ -55,7 +55,7 @@ export function Dashboard() {
             </div>
           ) : wa?.qrDataUrl ? (
             <div className="flex flex-col items-center gap-2">
-              <img src={wa.qrDataUrl} className="rounded-lg" alt="Escanear QR" />
+              <img src={wa.qrDataUrl} className="h-auto w-full max-w-[220px] rounded-lg" alt="Escanear QR" />
               <p className="text-xs text-zinc-400">
                 WhatsApp → Dispositivos vinculados → Vincular un dispositivo
               </p>
@@ -76,7 +76,7 @@ export function Dashboard() {
         <CardHeader>
           <CardTitle>Estado del agente</CardTitle>
         </CardHeader>
-        <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <CardBody className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="flex flex-col gap-1">
             <span className="text-xs text-zinc-500">Activo globalmente</span>
             <Switch

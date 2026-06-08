@@ -126,7 +126,7 @@ function SenderCard({
           </div>
         ) : c === "connecting" && status?.qrDataUrl ? (
           <div className="flex flex-col items-center gap-2">
-            <img src={status.qrDataUrl} className="rounded-lg" alt="QR del sender" />
+            <img src={status.qrDataUrl} className="h-auto w-full max-w-[220px] rounded-lg" alt="QR del sender" />
             <p className="text-center text-xs text-zinc-400">
               Escanéa con tu <strong>WhatsApp principal</strong> → Dispositivos vinculados
             </p>
@@ -227,7 +227,7 @@ function BatchForm({
               onChange={(e) => setTo(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div>
               <label className="mb-1 block text-xs text-zinc-400">Máx/tema</label>
               <Input
@@ -294,7 +294,7 @@ function BatchForm({
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-zinc-800 pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 pt-3">
           <label className="flex items-center gap-2 text-xs text-zinc-400">
             <input
               type="checkbox"
@@ -369,7 +369,7 @@ function BatchProgress({
         ) : null}
       </CardHeader>
       <CardBody className="space-y-3">
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <span className="text-emerald-300">Enviados: {batch.sent}</span>
           <span className="text-red-300">Fallos: {batch.failed}</span>
           <span className="text-zinc-400">Total: {batch.total}</span>

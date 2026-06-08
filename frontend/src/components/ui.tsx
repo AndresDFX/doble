@@ -18,7 +18,7 @@ Card.displayName = "Card";
 export function CardHeader({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex items-center justify-between border-b border-zinc-800 px-4 py-3", className)}
+      className={cn("flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 px-4 py-3", className)}
       {...rest}
     />
   );
@@ -41,7 +41,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "secondary", size = "md", ...rest }, ref) => {
     const base =
       "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-zinc-500/40";
-    const sizes = { sm: "h-7 px-2.5 text-xs", md: "h-9 px-3 text-sm" };
+    const sizes = { sm: "h-8 px-2.5 text-xs", md: "h-9 px-3 text-sm" };
     const variants = {
       primary: "bg-emerald-500 text-emerald-950 hover:bg-emerald-400",
       secondary: "bg-zinc-800 text-zinc-100 hover:bg-zinc-700 border border-zinc-700",
@@ -98,15 +98,15 @@ export function Switch({ checked, onChange, disabled, label }: SwitchProps) {
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
+          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
           checked ? "bg-emerald-500" : "bg-zinc-700",
           disabled && "opacity-50 cursor-not-allowed"
         )}
       >
         <span
           className={cn(
-            "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-            checked ? "translate-x-4" : "translate-x-0.5"
+            "inline-block h-5 w-5 transform rounded-full bg-white transition-transform",
+            checked ? "translate-x-5" : "translate-x-0.5"
           )}
         />
       </button>
@@ -151,7 +151,7 @@ export function StatusDot({ status }: { status: "ok" | "down" | "open" | "close"
     close: "bg-red-500",
     connecting: "bg-amber-500 animate-pulse",
   };
-  return <span className={cn("inline-block h-2 w-2 rounded-full", colors[status])} />;
+  return <span className={cn("inline-block h-2.5 w-2.5 rounded-full", colors[status])} />;
 }
 
 export function EmptyState({ children }: { children: React.ReactNode }) {

@@ -81,9 +81,9 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       <header className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
-        <div className="mx-auto w-full max-w-7xl px-4">
+        <div className="mx-auto w-full max-w-7xl px-3 sm:px-4">
           <div className="flex h-14 items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
+            <div className="flex min-w-0 items-center gap-2.5">
               <Logo />
               <div className="leading-tight">
                 <div className="text-sm font-semibold tracking-tight text-zinc-100">
@@ -94,12 +94,12 @@ export default function App() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <AgentModePill />
               <ConnectionPill />
             </div>
           </div>
-          <nav className="flex gap-0.5 overflow-x-auto">
+          <nav className="flex gap-0.5 overflow-x-auto [scrollbar-width:thin]">
             {TABS.map((t) => {
               const Icon = t.icon;
               const active = tab === t.id;
