@@ -11,6 +11,7 @@ import {
   Input,
   Switch,
 } from "../components/ui";
+import { cn } from "../lib/cn";
 import { toast } from "sonner";
 
 export function Chats() {
@@ -66,30 +67,20 @@ export function Chats() {
             </select>
           </div>
         </CardHeader>
-        <CardBody className="max-h-[70vh] overflow-auto p-0">
+        <CardBody className="max-h-[70vh] overflow-y-auto p-0">
           {chatsQ.data?.length ? (
-            <table className="w-full min-w-[34rem] text-sm">
-              <thead className="sticky top-0 bg-zinc-900 text-xs text-zinc-500">
-                <tr>
-                  <th className="px-3 py-2 text-left">Chat</th>
-                  <th className="px-3 py-2 text-left">Etiqueta</th>
-                  <th className="px-3 py-2 text-right">Msgs</th>
-                  <th className="px-3 py-2 text-center">Activo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {chatsQ.data.map((c) => (
-                  <ChatRow
-                    key={c.id}
-                    chat={c}
-                    labels={labelOptions}
-                    selected={selectedId === c.id}
-                    onSelect={() => setSelectedId(c.id)}
-                    onPatch={(body) => patchChat.mutate({ id: c.id, body })}
-                  />
-                ))}
-              </tbody>
-            </table>
+            <div className="divide-y divide-zinc-800">
+              {chatsQ.data.map((c) => (
+                <ChatRow
+                  key={c.id}
+                  chat={c}
+                  labels={labelOptions}
+                  selected={selectedId === c.id}
+                  onSelect={() => setSelectedId(c.id)}
+                  onPatch={(body) => patchChat.mutate({ id: c.id, body })}
+                />
+              ))}
+            </div>
           ) : (
             <EmptyState>Sin chats que mostrar.</EmptyState>
           )}
@@ -115,39 +106,36 @@ function ChatRow({
   onPatch: (body: { label?: string | null; agent_enabled?: boolean }) => void;
 }) {
   return (
-    <tr
+    <div
       onClick={onSelect}
-      className={`cursor-pointer border-t border-zinc-800 hover:bg-zinc-800/40 ${selected ? "bg-zinc-800/30" : ""}`}
+      className={cn(
+        "flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 hover:bg-zinc-800/40",
+        selected && "bg-zinc-800/30"
+      )}
     >
-      <td className="px-3 py-2">
-        <div className="font-medium text-zinc-100">{chat.name ?? "(sin nombre)"}</div>
-        <div className="font-mono text-[10px] text-zinc-500">{chat.id}</div>
-      </td>
-      <td className="px-3 py-2">
+      <div className="min-w-0 flex-1 basis-full sm:basis-0">
+        <div className="truncate font-medium text-zinc-100">{chat.name ?? "(sin nombre)"}</div>
+        <div className="truncate font-mono text-[10px] text-zinc-500">{chat.id}</div>
+      </div>
+      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
         <select
           value={chat.label ?? ""}
-          onClick={(e) => e.stopPropagation()}
           onChange={(e) => onPatch({ label: e.target.value || null })}
-          className="h-7 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100"
+          className="h-8 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100"
         >
-          <option value="">—</option>
+          <option value="">— etiqueta</option>
           {labels.map((l) => (
             <option key={l} value={l}>
               {l}
             </option>
           ))}
         </select>
-      </td>
-      <td className="px-3 py-2 text-right text-xs text-zinc-400">{chat.msgs}</td>
-      <td className="px-3 py-2">
-        <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
-          <Switch
-            checked={chat.agent_enabled}
-            onChange={(v) => onPatch({ agent_enabled: v })}
-          />
-        </div>
-      </td>
-    </tr>
+        <span className="shrink-0 text-xs text-zinc-500 tabular-nums">
+          {chat.msgs.toLocaleString()} msgs
+        </span>
+        <Switch checked={chat.agent_enabled} onChange={(v) => onPatch({ agent_enabled: v })} />
+      </div>
+    </div>
   );
 }
 
