@@ -19,7 +19,27 @@ El gateway lleva **dos sesiones Baileys** al mismo tiempo:
 - `.wa-session/` (módulo `src/baileys.ts`): la cuenta B, el agente.
 - `.wa-sender-session/` (módulo `src/sender/session.ts`): la cuenta A, para enviar batches de prueba desde el dashboard. Manejada via `/api/sender/*`.
 
-Event bus en `src/events.ts`, mirrors de estado en `src/wa-status.ts` y `src/sender/status.ts`, y ring buffer de actividad en `src/activity.ts` son los puentes entre los hot paths y la SSE: los handlers publican; la ruta SSE consume y emite al frontend.
+Event bus en `src/events.ts`, mirrors de estado en `src/wa-status.ts` y `src/sender/status.ts`, y ring buffer de actividad en `src/activity.ts` son los puentes entre los hot paths y la SSE: el use case y los servicios publican; la ruta SSE consume y emite al frontend.
+
+### Clean Architecture (gateway)
+
+El core del gateway sigue **Clean Architecture**: las dependencias apuntan hacia adentro (`interfaces → application → domain ← infrastructure`). Nada del dominio conoce Fastify, pg ni Baileys.
+
+- `src/domain/` — el centro, sin dependencias de frameworks:
+  - `entities.ts` (tipos: Chat, Message, Draft, AgentState, Label, OwnerNote, IncomingMessage, RagStats, constantes `OWNER_*`).
+  - `ports.ts` (interfaces: repositorios `*Repository`, servicios `AiService`/`WhatsAppGateway`, y puertos transversales `EventPublisher`/`ActivityLog`/`AppLogger`/`Clock`).
+  - `reply-policy.ts` (reglas puras del pipeline: ¿transcribir? ¿responder? ¿draft o enviar?).
+- `src/application/` — casos de uso, dependen **solo** de `domain` (puertos):
+  - `process-incoming-message.ts` (el pipeline entrante, antes `handlers/incoming.ts`).
+  - `reply-delivery.ts` (enviar+persistir+publicar+embeber, compartido por pipeline y "enviar draft").
+  - `services.ts` (un servicio por recurso HTTP: AgentState, Chat, Draft, Label, OwnerNote, Rag, Health).
+- `src/infrastructure/` — adapters que **implementan** los puertos: `repositories.ts` (todo el SQL Postgres), `ai-service.ts` (HTTP al AI service), `whatsapp-gateway.ts` (cadencia humana + envío), `whatsapp-socket.ts` (holder del socket), `adapters.ts` (bus/activity/logger/clock). `src/db.ts` solo expone el `pool`.
+- `src/composition/container.ts` — **composition root**: el único lugar que instancia clases concretas y las inyecta en los casos de uso. Singleton.
+- `src/api/routes/*` — **controllers** delgados: validan HTTP y llaman `container.<servicio>`. No hay SQL en las rutas.
+
+Regla al extender: lógica de negocio nueva → un caso de uso/servicio en `application` detrás de un puerto en `domain`; acceso a datos o IO → un adapter en `infrastructure`. Las rutas nunca tocan `pool` directamente.
+
+> Excepciones pragmáticas (tooling, no producto): `src/sender/*` (sesión Baileys A para batches de prueba) y `src/scripts/*` (cli, init-history, batch-send) siguen usando los singletons de infra directamente — no se refactorizaron a la arquitectura por capas a propósito.
 
 ## Comandos habituales
 
@@ -72,7 +92,7 @@ Activación de venv en PowerShell: `.\.venv\Scripts\Activate.ps1` (NO `activate`
 ## Reglas críticas (no romper)
 
 1. **`draft_mode = TRUE` por defecto.** El agente NO debe enviar respuestas automáticamente hasta que el usuario lo apague explícitamente con `cli draft off`. Nunca cambiar el default en el schema.
-2. **Cadencia humana al enviar**: `gateway/src/handlers/outgoing.ts` aplica delay aleatorio 2-8s + presence "composing". No quitar — protege contra ban de Baileys.
+2. **Cadencia humana al enviar**: `gateway/src/infrastructure/whatsapp-gateway.ts` aplica delay aleatorio 2-8s + presence "composing". No quitar — protege contra ban de Baileys.
 3. **Nunca ejecutar el gateway y `init-history` al mismo tiempo** — comparten sesión de WhatsApp Web y se patean.
 4. **Single-user en v1.** Sin auth, sin Stripe, sin multi-tenancy. Estos están explícitamente diferidos a v2; el usuario rechaza re-introducirlos en v1.
 
@@ -94,7 +114,9 @@ Pseudo-chat reservado con `chat_id = '__owner__'` y `label = '__owner__'`, gesti
 
 ## Archivos por dónde empezar
 
-- Pipeline de respuesta entrante: [gateway/src/handlers/incoming.ts](gateway/src/handlers/incoming.ts)
+- Pipeline de respuesta entrante (caso de uso): [gateway/src/application/process-incoming-message.ts](gateway/src/application/process-incoming-message.ts)
+- Puertos (interfaces del dominio): [gateway/src/domain/ports.ts](gateway/src/domain/ports.ts) · Composition root: [gateway/src/composition/container.ts](gateway/src/composition/container.ts)
+- SQL Postgres (repositorios): [gateway/src/infrastructure/repositories.ts](gateway/src/infrastructure/repositories.ts)
 - Generación con Gemini: [ai/app/routers/respond.py](ai/app/routers/respond.py)
 - Retrieval dual (chat + label) + distance: [ai/app/rag/retrieval.py](ai/app/rag/retrieval.py)
 - Retrieval inspector (sin generación): [ai/app/routers/retrieve.py](ai/app/routers/retrieve.py)

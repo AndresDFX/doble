@@ -1,17 +1,7 @@
 import { bus } from "./events.js";
+import type { ActivityKind, ActivityLevel } from "./domain/entities.js";
 
-export type ActivityKind =
-  | "wa"
-  | "sender"
-  | "message-in"
-  | "message-out"
-  | "draft"
-  | "ai"
-  | "batch"
-  | "system"
-  | "error";
-
-export type ActivityLevel = "info" | "success" | "warn" | "error";
+export type { ActivityKind, ActivityLevel } from "./domain/entities.js";
 
 export type Activity = {
   id: number;

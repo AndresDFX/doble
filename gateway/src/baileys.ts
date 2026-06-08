@@ -14,17 +14,11 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
-import { handleIncoming } from "./handlers/incoming.js";
+import { setSock } from "./infrastructure/whatsapp-socket.js";
+import { container } from "./composition/container.js";
 import { waStatus } from "./wa-status.js";
 import { bus } from "./events.js";
 import { activity } from "./activity.js";
-
-let currentSock: WASocket | null = null;
-
-export function getSock(): WASocket {
-  if (!currentSock) throw new Error("WhatsApp socket not initialized yet");
-  return currentSock;
-}
 
 export async function startBaileys(): Promise<void> {
   await mkdir(config.waSessionDir, { recursive: true });
@@ -41,7 +35,7 @@ export async function startBaileys(): Promise<void> {
     syncFullHistory: false,
     markOnlineOnConnect: false,
   });
-  currentSock = sock;
+  setSock(sock);
 
   sock.ev.on("creds.update", saveCreds);
 
@@ -104,7 +98,10 @@ export async function startBaileys(): Promise<void> {
     const shouldReply = type === "notify";
     for (const msg of messages) {
       try {
-        await handleIncoming(sock, msg, { shouldReply });
+        const extracted = await extractMessage(sock, msg);
+        if (extracted) {
+          await container.processIncomingMessage.execute(extracted, { shouldReply });
+        }
       } catch (err) {
         logger.error({ err, key: msg.key }, "Failed to handle message");
       }

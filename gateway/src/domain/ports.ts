@@ -1,0 +1,151 @@
+/**
+ * Ports: the interfaces the application layer depends on.
+ *
+ * These describe *what* the use cases need (persistence, AI, messaging,
+ * eventing, logging) without saying *how* — the "how" lives in
+ * `infrastructure/` adapters that implement these interfaces. This is the
+ * dependency-inversion boundary: application -> ports <- infrastructure.
+ */
+import type {
+  AgentState,
+  AgentStatePatch,
+  Chat,
+  ChatListFilter,
+  ChatPatch,
+  ChatUpsert,
+  ChatWithStats,
+  DraftInsert,
+  DraftListFilter,
+  DraftPatch,
+  DraftRecord,
+  DraftView,
+  Label,
+  LabelPatch,
+  LabelWithStats,
+  Message,
+  MessageListFilter,
+  MessageView,
+  OwnerNote,
+  OwnerNoteInsert,
+  RagStats,
+  ActivityKind,
+  ActivityLevel,
+} from "./entities.js";
+
+// --- Repositories (persistence gateways) ------------------------------------
+
+export interface AgentStateRepository {
+  get(): Promise<AgentState>;
+  patch(patch: AgentStatePatch): Promise<AgentState>;
+}
+
+export interface ChatRepository {
+  get(id: string): Promise<Chat | null>;
+  getWithStats(id: string): Promise<ChatWithStats | null>;
+  list(filter: ChatListFilter): Promise<ChatWithStats[]>;
+  upsert(chat: ChatUpsert): Promise<void>;
+  patch(id: string, patch: ChatPatch): Promise<void>;
+  ensureOwnerChat(): Promise<void>;
+}
+
+export interface MessageRepository {
+  insert(message: Message): Promise<void>;
+  updateContent(id: string, content: string): Promise<void>;
+  listByChat(filter: MessageListFilter): Promise<MessageView[]>;
+}
+
+export interface DraftRepository {
+  insert(draft: DraftInsert): Promise<number>;
+  list(filter: DraftListFilter): Promise<DraftView[]>;
+  getById(id: number): Promise<DraftRecord | null>;
+  patch(id: number, patch: DraftPatch): Promise<void>;
+  markSent(id: number): Promise<void>;
+  delete(id: number): Promise<void>;
+}
+
+export interface LabelRepository {
+  list(): Promise<LabelWithStats[]>;
+  upsert(label: Label): Promise<void>;
+  patch(label: string, patch: LabelPatch): Promise<void>;
+  countChats(label: string): Promise<number>;
+  delete(label: string): Promise<void>;
+}
+
+export interface OwnerNoteRepository {
+  list(): Promise<OwnerNote[]>;
+  create(note: OwnerNoteInsert): Promise<void>;
+  /** Returns false if no row matched (not an owner note / wrong id). */
+  update(id: string, content: string): Promise<boolean>;
+  delete(id: string): Promise<boolean>;
+}
+
+export interface RagReadModel {
+  stats(): Promise<RagStats>;
+}
+
+// --- External services ------------------------------------------------------
+
+export type RetrieveResult =
+  | { ok: true; data: unknown }
+  | { ok: false; status: number; error: string };
+
+export interface AiService {
+  respond(input: {
+    chat_id: string;
+    message_text: string;
+    sender_name: string | null;
+  }): Promise<{ reply: string }>;
+  transcribe(audioPath: string): Promise<string>;
+  embedAndStore(input: {
+    message_id: string;
+    chat_id: string;
+    label: string | null;
+    content: string;
+  }): Promise<void>;
+  retrieve(body: unknown): Promise<RetrieveResult>;
+  healthcheck(): Promise<boolean>;
+}
+
+/** Outbound WhatsApp messaging — send only; cadence/presence live in the adapter. */
+export interface WhatsAppGateway {
+  /** Sends text with human cadence; resolves to the sent message id, or null. */
+  sendText(chatId: string, text: string): Promise<{ id: string } | null>;
+}
+
+// --- Cross-cutting ports ----------------------------------------------------
+
+export interface EventPublisher {
+  messageStored(payload: {
+    id: string;
+    chat_id: string;
+    from_me: boolean;
+    content: string | null;
+    ts: string;
+  }): void;
+  draftCreated(payload: {
+    id: number;
+    chat_id: string;
+    content: string;
+    created_at: string;
+  }): void;
+}
+
+export interface ActivityLog {
+  push(entry: {
+    kind: ActivityKind;
+    level: ActivityLevel;
+    message: string;
+    meta?: Record<string, unknown>;
+  }): void;
+}
+
+export interface AppLogger {
+  debug(obj: unknown, msg?: string): void;
+  info(obj: unknown, msg?: string): void;
+  warn(obj: unknown, msg?: string): void;
+  error(obj: unknown, msg?: string): void;
+}
+
+export interface Clock {
+  now(): Date;
+}
