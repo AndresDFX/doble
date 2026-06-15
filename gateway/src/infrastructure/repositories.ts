@@ -86,6 +86,7 @@ type ChatStatsRow = {
   name: string | null;
   label: string | null;
   agent_enabled: boolean;
+  phone: string | null;
   msgs: number;
   last_ts: Date | null;
 };
@@ -93,7 +94,7 @@ type ChatStatsRow = {
 export class PostgresChatRepository implements ChatRepository {
   async get(id: string): Promise<Chat | null> {
     const { rows } = await pool.query<Chat>(
-      "SELECT id, name, label, agent_enabled FROM chats WHERE id = $1",
+      "SELECT id, name, label, agent_enabled, phone FROM chats WHERE id = $1",
       [id]
     );
     return rows[0] ?? null;
@@ -101,7 +102,7 @@ export class PostgresChatRepository implements ChatRepository {
 
   async getWithStats(id: string): Promise<ChatWithStats | null> {
     const { rows } = await pool.query<ChatStatsRow>(
-      `SELECT c.id, c.name, c.label, c.agent_enabled,
+      `SELECT c.id, c.name, c.label, c.agent_enabled, c.phone,
               COALESCE(stats.msgs, 0)::int AS msgs, stats.last_ts
        FROM chats c
        LEFT JOIN (
@@ -130,7 +131,7 @@ export class PostgresChatRepository implements ChatRepository {
     }
     values.push(filter.limit ?? 100, filter.offset ?? 0);
     const sql = `
-      SELECT c.id, c.name, c.label, c.agent_enabled,
+      SELECT c.id, c.name, c.label, c.agent_enabled, c.phone,
              COALESCE(stats.msgs, 0)::int AS msgs,
              stats.last_ts
       FROM chats c
@@ -148,11 +149,12 @@ export class PostgresChatRepository implements ChatRepository {
 
   async upsert(chat: ChatUpsert): Promise<void> {
     await pool.query(
-      `INSERT INTO chats (id, name, label) VALUES ($1, $2, $3)
+      `INSERT INTO chats (id, name, label, phone) VALUES ($1, $2, $3, $4)
        ON CONFLICT (id) DO UPDATE SET
          name = COALESCE(EXCLUDED.name, chats.name),
-         label = COALESCE(EXCLUDED.label, chats.label)`,
-      [chat.id, chat.name ?? null, chat.label ?? null]
+         label = COALESCE(EXCLUDED.label, chats.label),
+         phone = COALESCE(chats.phone, EXCLUDED.phone)`,
+      [chat.id, chat.name ?? null, chat.label ?? null, chat.phone ?? null]
     );
   }
 
@@ -167,6 +169,10 @@ export class PostgresChatRepository implements ChatRepository {
     if (patch.agent_enabled !== undefined) {
       sets.push(`agent_enabled = $${i++}`);
       values.push(patch.agent_enabled);
+    }
+    if (patch.name !== undefined) {
+      sets.push(`name = $${i++}`);
+      values.push(patch.name);
     }
     if (sets.length === 0) return;
     values.push(id);
@@ -197,6 +203,14 @@ export class PostgresMessageRepository implements MessageRepository {
 
   async updateContent(id: string, content: string): Promise<void> {
     await pool.query("UPDATE messages SET content = $1 WHERE id = $2", [content, id]);
+  }
+
+  async getContent(id: string): Promise<string | null> {
+    const { rows } = await pool.query<{ content: string | null }>(
+      "SELECT content FROM messages WHERE id = $1",
+      [id]
+    );
+    return rows[0]?.content ?? null;
   }
 
   async listByChat(filter: MessageListFilter): Promise<MessageView[]> {
@@ -232,8 +246,9 @@ export class PostgresMessageRepository implements MessageRepository {
 export class PostgresDraftRepository implements DraftRepository {
   async insert(d: DraftInsert): Promise<number> {
     const { rows } = await pool.query<{ id: number }>(
-      `INSERT INTO drafts (chat_id, reply_to_id, content) VALUES ($1, $2, $3) RETURNING id`,
-      [d.chat_id, d.reply_to_id, d.content]
+      `INSERT INTO drafts (chat_id, reply_to_id, content, kind, missing)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [d.chat_id, d.reply_to_id, d.content, d.kind ?? "reply", d.missing ?? null]
     );
     return rows[0]!.id;
   }
@@ -253,12 +268,14 @@ export class PostgresDraftRepository implements DraftRepository {
       reply_to_id: string | null;
       content: string;
       status: DraftView["status"];
+      kind: DraftView["kind"];
+      missing: string | null;
       created_at: Date;
       sent_at: Date | null;
       chat_name: string | null;
       chat_label: string | null;
     }>(
-      `SELECT d.id, d.chat_id, d.reply_to_id, d.content, d.status,
+      `SELECT d.id, d.chat_id, d.reply_to_id, d.content, d.status, d.kind, d.missing,
               d.created_at, d.sent_at,
               c.name AS chat_name, c.label AS chat_label
        FROM drafts d
@@ -277,7 +294,7 @@ export class PostgresDraftRepository implements DraftRepository {
 
   async getById(id: number): Promise<DraftRecord | null> {
     const { rows } = await pool.query<DraftRecord>(
-      "SELECT id, chat_id, content, status FROM drafts WHERE id = $1",
+      "SELECT id, chat_id, content, status, kind FROM drafts WHERE id = $1",
       [id]
     );
     return rows[0] ?? null;

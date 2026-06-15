@@ -6,7 +6,8 @@
  * rules delegated to `reply-policy`. Knows nothing about Baileys, Fastify, or
  * Postgres.
  */
-import type { IncomingMessage } from "../domain/entities.js";
+import type { Chat, IncomingMessage } from "../domain/entities.js";
+import { OWNER_NOTIFY_LABEL } from "../domain/entities.js";
 import type {
   ActivityLog,
   AgentStateRepository,
@@ -23,6 +24,7 @@ import {
   decideReply,
   deliveryMode,
   hasText,
+  holdForInfo,
   isOwnMessage,
   needsTranscription,
 } from "../domain/reply-policy.js";
@@ -50,7 +52,7 @@ export class ProcessIncomingMessage {
   ): Promise<void> {
     const d = this.deps;
 
-    await d.chats.upsert({ id: msg.chat_id });
+    await d.chats.upsert({ id: msg.chat_id, phone: msg.phone ?? undefined });
     await d.messages.insert({
       id: msg.id,
       chat_id: msg.chat_id,
@@ -126,20 +128,27 @@ export class ProcessIncomingMessage {
       return;
     }
 
-    let reply: string;
+    let result: { status: "answer" | "need_info"; reply: string; missing: string | null };
     const aiStart = d.clock.now().getTime();
     try {
-      const result = await d.ai.respond({
+      result = await d.ai.respond({
         chat_id: msg.chat_id,
         message_text: msg.text!,
         sender_name: msg.sender_name,
       });
-      reply = result.reply;
       d.activity.push({
         kind: "ai",
         level: "success",
         message: `Gemini respondió en ${d.clock.now().getTime() - aiStart}ms`,
-        meta: { chat_id: msg.chat_id, label: chat?.label ?? null, preview: reply.slice(0, 60) },
+        meta: {
+          chat_id: msg.chat_id,
+          label: chat?.label ?? null,
+          status: result.status,
+          preview:
+            result.status === "need_info"
+              ? `need_info: ${result.missing ?? ""}`
+              : result.reply.slice(0, 60),
+        },
       });
     } catch (err) {
       const m = (err as Error).message;
@@ -152,6 +161,43 @@ export class ProcessIncomingMessage {
       });
       return;
     }
+
+    // Abstención: el agente no tiene contexto suficiente. Nunca inventamos ni
+    // enviamos (ni en auto-send): se crea un draft "needs_info" para que el dueño
+    // responda o agregue el dato faltante a su memoria.
+    if (holdForInfo(result)) {
+      const draftId = await d.drafts.insert({
+        chat_id: msg.chat_id,
+        reply_to_id: msg.id,
+        content: "",
+        kind: "needs_info",
+        missing: result.missing,
+      });
+      d.logger.info(
+        { draftId, chat_id: msg.chat_id, missing: result.missing },
+        "Need-info draft saved (abstención — falta contexto)"
+      );
+      d.events.draftCreated({
+        id: draftId,
+        chat_id: msg.chat_id,
+        content: "",
+        created_at: d.clock.now().toISOString(),
+        kind: "needs_info",
+        missing: result.missing,
+      });
+      d.activity.push({
+        kind: "draft",
+        level: "warn",
+        message: `Falta contexto para responder a ${chat?.name ?? msg.chat_id}${
+          result.missing ? `: ${result.missing}` : ""
+        }`,
+        meta: { chat_id: msg.chat_id, label: chat?.label ?? null, missing: result.missing },
+      });
+      await this.notifyOwner(msg, chat, result.missing);
+      return;
+    }
+
+    const reply = result.reply;
 
     if (deliveryMode(state) === "draft") {
       const draftId = await d.drafts.insert({
@@ -189,5 +235,51 @@ export class ProcessIncomingMessage {
       chat?.label ?? null
     );
     d.logger.info({ chat_id: msg.chat_id }, "Reply sent");
+  }
+
+  /**
+   * Ping the owner over WhatsApp about a need_info abstention. Sends to every
+   * chat tagged with OWNER_NOTIFY_LABEL (skipping the chat that triggered it, to
+   * avoid double-messaging the same conversation). Best-effort: never throws.
+   */
+  private async notifyOwner(
+    msg: IncomingMessage,
+    chat: Chat | null,
+    missing: string | null
+  ): Promise<void> {
+    const d = this.deps;
+    let targets;
+    try {
+      const labeled = await d.chats.list({ label: OWNER_NOTIFY_LABEL, limit: 50 });
+      targets = labeled.filter((c) => c.id !== msg.chat_id);
+    } catch (err) {
+      d.logger.warn({ err }, "notifyOwner: could not list notify chats");
+      return;
+    }
+    if (targets.length === 0) return;
+
+    const who = chat?.name ?? (msg.phone ? `+${msg.phone}` : msg.chat_id);
+    const incoming = msg.text?.trim() ?? "";
+    const snippet = incoming.length > 140 ? `${incoming.slice(0, 140)}…` : incoming;
+    const text =
+      `🤖 No supe qué responder.\n` +
+      `De: ${who}\n` +
+      (snippet ? `Decía: "${snippet}"\n` : "") +
+      (missing ? `Me falta: ${missing}\n` : "") +
+      `Respóndele tú o agrégalo en mis notas.`;
+
+    for (const t of targets) {
+      try {
+        await d.whatsapp.sendText(t.id, text);
+        d.activity.push({
+          kind: "system",
+          level: "info",
+          message: `Aviso de falta de contexto enviado a ${t.name ?? t.id}`,
+          meta: { chat_id: t.id, about: msg.chat_id },
+        });
+      } catch (err) {
+        d.logger.warn({ err, target: t.id }, "notifyOwner: failed to send notification");
+      }
+    }
   }
 }

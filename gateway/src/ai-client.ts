@@ -3,7 +3,11 @@ import { logger } from "./logger.js";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 
-export type RespondResponse = { reply: string };
+export type RespondResponse = {
+  status: "answer" | "need_info";
+  reply: string;
+  missing: string | null;
+};
 
 export async function aiRespond(input: {
   chat_id: string;
@@ -19,7 +23,13 @@ export async function aiRespond(input: {
     const body = await res.text();
     throw new Error(`AI /respond failed (${res.status}): ${body}`);
   }
-  return (await res.json()) as RespondResponse;
+  // Defensive: tolerate an older AI service that returns just { reply }.
+  const data = (await res.json()) as Partial<RespondResponse>;
+  return {
+    status: data.status === "need_info" ? "need_info" : "answer",
+    reply: data.reply ?? "",
+    missing: data.missing ?? null,
+  };
 }
 
 export async function aiTranscribe(audioPath: string): Promise<string> {

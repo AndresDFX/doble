@@ -22,6 +22,14 @@ export type MessageType =
 export const OWNER_CHAT_ID = "__owner__";
 export const OWNER_LABEL = "__owner__";
 
+/**
+ * Reserved label that turns a chat into a notification inbox: when the agent
+ * abstains (need_info) in ANY chat, every chat tagged with this label gets a
+ * WhatsApp ping. Tag the chat with your own number to be alerted on your phone.
+ * Reserved — renaming it in the Labels tab breaks the routing.
+ */
+export const OWNER_NOTIFY_LABEL = "Owner";
+
 // --- Agent state -------------------------------------------------------------
 export type AgentState = {
   enabled: boolean;
@@ -40,13 +48,20 @@ export type Chat = {
   name: string | null;
   label: string | null;
   agent_enabled: boolean;
+  /** Contact phone (digits only, no '+'). Null when unknown (e.g. @lid not yet shared). */
+  phone: string | null;
 };
 export type ChatWithStats = Chat & {
   msgs: number;
   last_ts: string | null;
 };
-export type ChatUpsert = { id: string; name?: string | null; label?: string | null };
-export type ChatPatch = { label?: string | null; agent_enabled?: boolean };
+export type ChatUpsert = {
+  id: string;
+  name?: string | null;
+  label?: string | null;
+  phone?: string | null;
+};
+export type ChatPatch = { label?: string | null; agent_enabled?: boolean; name?: string | null };
 export type ChatListFilter = { label?: string; q?: string; limit?: number; offset?: number };
 
 // --- Messages ----------------------------------------------------------------
@@ -80,18 +95,36 @@ export type IncomingMessage = {
   type: MessageType;
   text: string | null;
   mediaPath: string | null;
+  /** Contact phone (digits only) derived from the JID or captured from key.senderPn. */
+  phone: string | null;
 };
 
 // --- Drafts ------------------------------------------------------------------
 export type DraftStatus = "pending" | "approved" | "sent" | "discarded";
-export type DraftInsert = { chat_id: string; reply_to_id: string | null; content: string };
-export type DraftRecord = { id: number; chat_id: string; content: string; status: DraftStatus };
+/** `needs_info` drafts are abstentions: the agent lacked context and asks the owner. */
+export type DraftKind = "reply" | "needs_info";
+export type DraftInsert = {
+  chat_id: string;
+  reply_to_id: string | null;
+  content: string;
+  kind?: DraftKind;
+  missing?: string | null;
+};
+export type DraftRecord = {
+  id: number;
+  chat_id: string;
+  content: string;
+  status: DraftStatus;
+  kind: DraftKind;
+};
 export type DraftView = {
   id: number;
   chat_id: string;
   reply_to_id: string | null;
   content: string;
   status: DraftStatus;
+  kind: DraftKind;
+  missing: string | null;
   created_at: string;
   sent_at: string | null;
   chat_name: string | null;

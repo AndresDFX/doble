@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { container } from "../../composition/container.js";
 
-type ChatPatch = { label?: string | null; agent_enabled?: boolean };
+type ChatPatch = { label?: string | null; agent_enabled?: boolean; name?: string | null };
 
 export async function registerChatRoutes(app: FastifyInstance): Promise<void> {
   app.get<{
@@ -28,12 +28,22 @@ export async function registerChatRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string }; Body: ChatPatch }>(
     "/api/chats/:id",
     async (req, reply) => {
-      const { label, agent_enabled } = req.body ?? {};
-      if (label === undefined && agent_enabled === undefined) {
+      const { label, agent_enabled, name } = req.body ?? {};
+      if (label === undefined && agent_enabled === undefined && name === undefined) {
         reply.status(400);
         return { error: "no fields to update" };
       }
-      await container.chats.patch(req.params.id, { label, agent_enabled });
+      // Normalize name: trim, empty -> null (clears it), reject overly long values.
+      let normalizedName: string | null | undefined = name;
+      if (name !== undefined) {
+        const trimmed = (name ?? "").trim();
+        if (trimmed.length > 200) {
+          reply.status(400);
+          return { error: "name too long (max 200 chars)" };
+        }
+        normalizedName = trimmed === "" ? null : trimmed;
+      }
+      await container.chats.patch(req.params.id, { label, agent_enabled, name: normalizedName });
       return { ok: true };
     }
   );

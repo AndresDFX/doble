@@ -61,7 +61,17 @@ export async function registerOwnerNotesRoutes(app: FastifyInstance): Promise<vo
       reply.status(400);
       return { error: "content is required" };
     }
-    return container.ownerNotes.create({ content, raw_media_path: req.body.raw_media_path ?? null });
+    const note = await container.ownerNotes.create({
+      content,
+      raw_media_path: req.body.raw_media_path ?? null,
+    });
+    // New context may unblock pending "need_info" abstentions — answer them now
+    // instead of waiting for the contact to insist. Fire-and-forget; SSE pushes
+    // the resulting draft/reply.
+    void container.retryNeedInfo
+      .run()
+      .catch((err) => app.log.warn({ err }, "retryNeedInfo after note create failed"));
+    return note;
   });
 
   app.patch<{ Params: { id: string }; Body: PatchBody }>(
@@ -77,6 +87,9 @@ export async function registerOwnerNotesRoutes(app: FastifyInstance): Promise<vo
         reply.status(result.status);
         return { error: result.error };
       }
+      void container.retryNeedInfo
+        .run()
+        .catch((err) => app.log.warn({ err }, "retryNeedInfo after note update failed"));
       return { ok: true };
     }
   );

@@ -43,3 +43,12 @@ export type DeliveryMode = "draft" | "send";
 export function deliveryMode(state: AgentState): DeliveryMode {
   return state.draft_mode ? "draft" : "send";
 }
+
+/**
+ * The model abstained — it lacks grounding to answer this without inventing.
+ * Such replies are NEVER sent (even in auto-send): they surface to the owner as
+ * a "needs_info" draft so a real answer can be supplied.
+ */
+export function holdForInfo(result: { status: "answer" | "need_info" }): boolean {
+  return result.status === "need_info";
+}

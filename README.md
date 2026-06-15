@@ -1,6 +1,6 @@
 # Doble (MVP v1)
 
-**Tu doble en WhatsApp.** Agente personal con RAG: lee tus chats existentes, aprende tu lenguaje y responde adaptando el tono según la etiqueta del chat (Familia / Trabajo / Amigos / Amor / custom).
+**Tu doble en WhatsApp.** Agente personal con RAG: lee tus chats existentes, aprende tu lenguaje y **adapta el vocabulario a cada persona** (con base de español colombiano). Responde corto y natural según la etiqueta del chat (Familia / Trabajo / Amigos / Amor / custom), y **cuando le falta contexto no inventa**: se abstiene, te avisa y puede responder solo en cuanto le das la información.
 
 > El nombre interno de la base de datos y sus credenciales siguen siendo `wa_agent` por compatibilidad con volúmenes existentes; sólo es plumbing, no afecta la marca.
 
@@ -11,8 +11,8 @@
 ## Componentes
 
 - `gateway/` — Node.js + Baileys + **Fastify HTTP API** (REST + SSE), estructurado con **Clean Architecture** (`domain` / `application` / `infrastructure`; ver [CLAUDE.md](CLAUDE.md)). Sesión de WhatsApp, recepción de mensajes, envío de respuestas, y endpoints `/api/*` que consume el frontend.
-- `ai/` — Python + FastAPI. Embeddings, retrieval RAG (pgvector), generación con **Gemini 2.5 Flash**, transcripción multimodal con el mismo modelo (sin Whisper).
-- `frontend/` — **React 19 + Vite + Tailwind v4 + TanStack Query**. Dashboard de administración: estado de servicios, gestión de chats/etiquetas, revisión de borradores, edición de prompts. Updates en tiempo real vía SSE.
+- `ai/` — Python + FastAPI. Embeddings, retrieval RAG (pgvector), generación con **Gemini 2.5 Flash** (salida estructurada `{status, reply, missing}` para **abstenerse cuando falta contexto**), transcripción multimodal con el mismo modelo (sin Whisper).
+- `frontend/` — **React 19 + Vite + Tailwind v4 + TanStack Query**. Dashboard de administración: estado de servicios, gestión de chats/etiquetas (con **edición de nombre** y **teléfono** por chat), revisión de borradores (incluidos los avisos de **falta de contexto**), edición de prompts. Updates en tiempo real vía SSE.
 - `db/init.sql` — schema de Postgres con extensión pgvector y datos iniciales.
 - `docker-compose.yml` — stack completo: postgres + ai + gateway + frontend.
 
@@ -153,6 +153,8 @@ npm run cli -- drafts                   # ver pendientes
 npm run cli -- drafts approve <id>      # marcar aprobado (todavía no envía solo)
 ```
 
+En el dashboard, la pestaña **Borradores** muestra dos tipos: respuestas normales listas para enviar/editar, y avisos de **falta de contexto** (`needs_info`) cuando el agente no supo responder — con el dato que necesita y un botón para responder tú. Ver [Cómo responde el agente](#cómo-responde-el-agente).
+
 ### Bootstrap del RAG con tu historial (PRIMERA VEZ)
 
 **Antes** de arrancar el gateway por primera vez, corre el ingestor de historial. Esto usa `syncFullHistory: true` de Baileys para pedirle a WhatsApp todo el historial reciente que tiene del dispositivo, persistirlo y embedderlo.
@@ -204,6 +206,8 @@ Ideas de cosas para grabar:
 
 Cuando un dato cambie, edita o borra la nota — se re-embedde al editar.
 
+> **Auto-respuesta**: si había una pregunta pendiente por falta de contexto (un borrador `needs_info`), al guardar/editar la nota el agente **reevalúa lo pendiente y responde solo** si la nota ya resuelve la duda — sin esperar a que el contacto vuelva a insistir. La respuesta se entrega según `draft_mode` (borrador o envío). Ver [Cómo responde el agente](#cómo-responde-el-agente).
+
 ## Inspeccionar el RAG
 
 La pestaña **RAG** muestra qué está pasando en la capa de embeddings + retrieval:
@@ -240,6 +244,32 @@ SET prompt_template = 'Eres {user_name}. ...',
 WHERE label = 'trabajo';
 ```
 
+Además de las etiquetas de tono, existe una **etiqueta reservada `Owner`** para enrutar avisos (ver [Cómo responde el agente](#cómo-responde-el-agente)). No la renombres: el ruteo de notificaciones busca ese nombre literal.
+
+## Cómo responde el agente
+
+El motor de respuesta hace varias cosas para sonar humano y no meter la pata:
+
+### Se adapta a cómo escribe cada persona
+Además de imitar **tu** estilo, el agente espeja el **registro y vocabulario del contacto** en cada chat (acomodación lingüística): si el otro escribe formal, responde formal; si usa jerga, la usa. Por defecto se apoya en **español colombiano coloquial** (parce, qué más, bacano, de una…), pero **subordinado** a cómo escribe el contacto real — nunca fuerza jerga en alguien formal. Para esto, el retrieval suma un slice con los **mensajes recientes del contacto** (por tiempo, no por similitud), de modo que capta su forma actual de hablar.
+
+### Responde corto
+Imita el largo del contacto. Para saludos o confirmaciones devuelve cosas como "listo", "todo bien", "va" — sin preguntas retóricas de relleno ni explicaciones. Mejor corto que sonar a bot.
+
+### No inventa nombres
+Solo se dirige al contacto por su nombre si el chat tiene **nombre asignado** (editable en la pestaña Chats). Si no lo tiene, no usa ninguno; nunca inventa ni reutiliza nombres que aparezcan en los ejemplos de estilo o en el historial.
+
+### Cuando no sabe, se abstiene (no alucina)
+Si responder requiere un dato concreto que **no** está en el contexto ni en tus notas, el agente no inventa: el servicio `ai` devuelve `status = "need_info"` y, en vez de mandar algo inventado, se crea un **borrador "falta contexto"** en el dashboard indicando qué dato falta. El modelo decide entre `answer` y `need_info` vía salida estructurada `{status, reply, missing}`.
+
+### Avisos por WhatsApp: etiqueta `Owner`
+Marca con la etiqueta reservada **`Owner`** el chat que quieras (típicamente el tuyo). Cuando el agente se abstiene en **cualquier** chat, te llega un **aviso por WhatsApp** a ese chat con quién preguntó, qué decía y qué dato falta. Si ningún chat tiene la etiqueta, solo queda el borrador en el dashboard.
+
+### Auto-respuesta al agregar contexto
+Si había una pregunta pendiente por falta de contexto y luego agregas una **nota** (pestaña Notas) con esa información, el agente **reevalúa lo pendiente y responde solo** — sin esperar a que el contacto vuelva a insistir. La entrega respeta `draft_mode`: borrador si está activo, envío automático si lo apagaste.
+
+> **`draft_mode` controla la entrega, no el comportamiento.** El agente siempre genera/reevalúa respuestas; `draft_mode = TRUE` las deja como borrador para que las revises, `FALSE` las envía solas. Esto aplica tanto a mensajes entrantes como a la auto-respuesta de arriba.
+
 ## Verificación end-to-end
 
 1. `docker compose up -d postgres` y verificar healthy
@@ -249,12 +279,15 @@ WHERE label = 'trabajo';
 5. `npm run cli -- drafts` debería mostrar la respuesta generada como borrador
 6. Mandarte un audio: debería transcribirse y generar borrador con el texto
 7. Cambiar `chat label <jid> trabajo`, mandar mismo mensaje desde otro chat con etiqueta `familia`: verificar que las dos respuestas difieren en tono
+8. **Abstención**: preguntar algo factual sin contexto (p. ej. "¿a qué hora es la cita del viernes?"). Debe aparecer un borrador **"falta contexto"** (no una respuesta inventada). Un saludo, en cambio, sí se responde normal y corto.
+9. **Auto-respuesta**: con un borrador `needs_info` pendiente, agregar en **Notas** el dato que falta. El agente debe convertirlo en respuesta (borrador o envío según `draft_mode`) sin que el contacto vuelva a preguntar.
+10. **Avisos**: etiquetar un chat como `Owner`; al abstenerse en otro chat, debe llegar el aviso a ese chat por WhatsApp.
 
 ## Estado v1 vs deferido
 
-**Hecho (v1+)**: WhatsApp conectado; RAG por chat + por etiqueta; templates de tono por categoría; transcripción de audios entrantes; on/off global y por chat; modo borrador; **dashboard web (React) con updates en vivo por SSE**; **notas del dueño por audio/texto que alimentan el RAG**; **inspector de RAG** (stats + explorador de retrieval); **feed de actividad en vivo**; **batch sender desde la UI** (cuenta A → agente B); **UI responsive (móvil/tablet)**; **gateway con Clean Architecture**; **publicado en GitHub**.
+**Hecho (v1+)**: WhatsApp conectado; RAG por chat + por etiqueta; templates de tono por categoría; transcripción de audios entrantes; on/off global y por chat; modo borrador; **dashboard web (React) con updates en vivo por SSE**; **notas del dueño por audio/texto que alimentan el RAG**; **inspector de RAG** (stats + explorador de retrieval); **feed de actividad en vivo**; **batch sender desde la UI** (cuenta A → agente B); **UI responsive (móvil/tablet)**; **gateway con Clean Architecture**; **publicado en GitHub**; **abstención anti-alucinación** (no inventa: borradores "falta contexto"); **avisos por WhatsApp** vía etiqueta reservada `Owner`; **auto-respuesta al agregar contexto** (reevalúa pendientes al guardar una nota); **adaptación de registro por chat** + base colombiana + respuestas cortas/humanas; **regla anti-invención de nombres**; **edición de nombre y teléfono por chat** en el dashboard.
 
-**Diferido a v2+**: TTS / clonación de voz · stickers con visión · resúmenes diarios · notificaciones Telegram + aprobación humana · scheduler horario · multi-tenancy · Stripe · self-hosting (ollama + whisper.cpp + nomic-embed-text).
+**Diferido a v2+**: TTS / clonación de voz · stickers con visión · resúmenes diarios · notificaciones por Telegram (los avisos por WhatsApp + la revisión de borradores ya cubren la aprobación humana) · scheduler horario · multi-tenancy · Stripe · self-hosting (ollama + whisper.cpp + nomic-embed-text).
 
 ## Próximos pasos (tareas siguientes)
 
@@ -266,11 +299,11 @@ Cercano — sin romper las reglas de v1 (sin auth/Stripe/multi-tenancy):
 4. **(Opcional) Extender Clean Architecture al servicio `ai/`** (Python): separar dominio (RAG/retrieval) de adapters (Gemini, pgvector).
 5. **(Entorno) Fuente del terminal**: fijar *MesloLGM Nerd Font* para ver los íconos del prompt (Oh My Posh ya quedó activo en el perfil de PowerShell).
 
-Más adelante (v2): ver *Diferido a v2+*. Buen primer candidato: notificaciones Telegram + aprobación humana — el catálogo de batch ya trae temas `salud`/`reunion` pensados para probarlas.
+Más adelante (v2): ver *Diferido a v2+*. La aprobación humana ya existe vía borradores + avisos por WhatsApp (etiqueta `Owner`); el siguiente salto natural sería notificaciones por Telegram o un scheduler horario.
 
 ## Riesgos conocidos
 
 1. **Ban de número**: usar número secundario. Cadencia humana (delay 2–8s + "typing") ya implementada en `gateway/src/infrastructure/whatsapp-gateway.ts`.
 2. **Privacidad**: todos los mensajes se envían a Google (Gemini) para embeddings/chat/STT. Self-hosting completo (ollama + whisper.cpp + nomic-embed-text) = trabajo de v2.
-3. **Respuestas inadecuadas**: por eso `draft_mode = TRUE` por defecto. Bajar a `false` solo cuando confíes en la calidad.
+3. **Respuestas inadecuadas**: por eso `draft_mode = TRUE` por defecto. Bajar a `false` solo cuando confíes en la calidad. Mitigación adicional: el agente **se abstiene cuando le falta contexto** (no inventa) y respeta el nombre asignado al chat (no inventa nombres).
 4. **Cuotas Gemini free tier**: si te topas con `429 RESOURCE_EXHAUSTED`, esperar 60s y reintentar; o subir a tier de pago en aistudio.google.com.

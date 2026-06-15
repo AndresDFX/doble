@@ -55,8 +55,14 @@ export default function App() {
     },
     draft: (data) => {
       qc.invalidateQueries({ queryKey: ["drafts"] });
-      const d = data as { content: string; chat_id: string };
-      toast.info(`Nuevo borrador en ${d.chat_id}`, { description: d.content });
+      const d = data as { content: string; chat_id: string; kind?: string; missing?: string | null };
+      if (d.kind === "needs_info") {
+        toast.warning(`Falta contexto en ${d.chat_id}`, {
+          description: d.missing ?? "El agente no supo responder.",
+        });
+      } else {
+        toast.info(`Nuevo borrador en ${d.chat_id}`, { description: d.content });
+      }
     },
     activity: (data) => {
       qc.setQueryData<unknown[]>(["activity"], (prev) => {

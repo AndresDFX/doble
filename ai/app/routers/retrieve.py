@@ -56,6 +56,7 @@ async def retrieve(req: RetrieveRequest) -> RetrieveResponse:
             label=chat_label,
             k_chat=req.k_chat if req.chat_id else 0,
             k_label=req.k_label,
+            k_contact=0,  # inspector shows similarity-ranked retrieval only
         )
         if (req.chat_id or chat_label)
         else []

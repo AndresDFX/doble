@@ -23,6 +23,8 @@ export class BusEventPublisher implements EventPublisher {
     chat_id: string;
     content: string;
     created_at: string;
+    kind?: "reply" | "needs_info";
+    missing?: string | null;
   }): void {
     bus.publish({ type: "draft", payload });
   }

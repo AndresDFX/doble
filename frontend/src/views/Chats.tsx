@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Chat, type Message } from "../lib/api";
 import {
   Badge,
+  Button,
   Card,
   CardBody,
   CardHeader,
@@ -13,6 +14,7 @@ import {
 } from "../components/ui";
 import { cn } from "../lib/cn";
 import { toast } from "sonner";
+import { Pencil, Check, X } from "lucide-react";
 
 export function Chats() {
   const qc = useQueryClient();
@@ -32,8 +34,10 @@ export function Chats() {
   );
 
   const patchChat = useMutation({
-    mutationFn: (input: { id: string; body: { label?: string | null; agent_enabled?: boolean } }) =>
-      api.chats.patch(input.id, input.body),
+    mutationFn: (input: {
+      id: string;
+      body: { label?: string | null; agent_enabled?: boolean; name?: string | null };
+    }) => api.chats.patch(input.id, input.body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["chats"] });
       toast.success("Chat actualizado");
@@ -103,8 +107,27 @@ function ChatRow({
   labels: string[];
   selected: boolean;
   onSelect: () => void;
-  onPatch: (body: { label?: string | null; agent_enabled?: boolean }) => void;
+  onPatch: (body: { label?: string | null; agent_enabled?: boolean; name?: string | null }) => void;
 }) {
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(chat.name ?? "");
+
+  const saveName = () => {
+    onPatch({ name: nameDraft.trim() || null });
+    setEditingName(false);
+  };
+  const cancelName = () => {
+    setNameDraft(chat.name ?? "");
+    setEditingName(false);
+  };
+
+  // Phone: prefer the persisted value, else derive from an @s.whatsapp.net JID.
+  const phone =
+    chat.phone ??
+    (chat.id.endsWith("@s.whatsapp.net") ? chat.id.split("@")[0]?.split(":")[0] ?? null : null);
+  const isGroup = chat.id.endsWith("@g.us");
+  const isLid = chat.id.endsWith("@lid");
+
   return (
     <div
       onClick={onSelect}
@@ -114,8 +137,54 @@ function ChatRow({
       )}
     >
       <div className="min-w-0 flex-1 basis-full sm:basis-0">
-        <div className="truncate font-medium text-zinc-100">{chat.name ?? "(sin nombre)"}</div>
-        <div className="truncate font-mono text-[10px] text-zinc-500">{chat.id}</div>
+        {editingName ? (
+          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <Input
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveName();
+                if (e.key === "Escape") cancelName();
+              }}
+              autoFocus
+              placeholder="Nombre del contacto"
+              className="h-7 text-sm"
+            />
+            <Button variant="primary" size="sm" onClick={saveName} title="Guardar">
+              <Check className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={cancelName} title="Cancelar">
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <span className="truncate font-medium text-zinc-100">
+              {chat.name ?? "(sin nombre)"}
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setNameDraft(chat.name ?? "");
+                setEditingName(true);
+              }}
+              className="shrink-0 text-zinc-500 hover:text-zinc-200"
+              title="Editar nombre"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-zinc-500">
+          {phone ? (
+            <span className="font-mono text-zinc-400">+{phone}</span>
+          ) : isGroup ? (
+            <span>grupo</span>
+          ) : isLid ? (
+            <span className="text-amber-500/80">sin número</span>
+          ) : null}
+          <span className="truncate font-mono">{chat.id}</span>
+        </div>
       </div>
       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
         <select

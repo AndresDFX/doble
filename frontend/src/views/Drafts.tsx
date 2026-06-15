@@ -109,8 +109,20 @@ function DraftCard({
   const [editing, setEditing] = useState(false);
   const [content, setContent] = useState(draft.content);
 
+  // Show the abstention treatment only while unresolved; once sent it reads as a normal draft.
+  const isNeedsInfo = draft.kind === "needs_info";
+  const showNeedsInfo = isNeedsInfo && draft.status === "pending";
+  // A needs_info draft has no canned reply yet — the owner must write one before sending.
+  const hasReply = draft.content.trim().length > 0;
+
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 p-3">
+    <div
+      className={`rounded-lg border p-3 ${
+        showNeedsInfo
+          ? "border-amber-500/40 bg-amber-500/5"
+          : "border-zinc-800 bg-zinc-950/30"
+      }`}
+    >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="font-medium text-zinc-200">
@@ -122,22 +134,42 @@ function DraftCard({
             <span>{new Date(draft.created_at).toLocaleString()}</span>
           </div>
         </div>
-        <Badge
-          tone={
-            draft.status === "pending"
-              ? "amber"
-              : draft.status === "sent"
-                ? "green"
-                : draft.status === "discarded"
-                  ? "red"
-                  : "default"
-          }
-        >
-          {draft.status}
-        </Badge>
+        {showNeedsInfo ? (
+          <Badge tone="amber">falta contexto</Badge>
+        ) : (
+          <Badge
+            tone={
+              draft.status === "pending"
+                ? "amber"
+                : draft.status === "sent"
+                  ? "green"
+                  : draft.status === "discarded"
+                    ? "red"
+                    : "default"
+            }
+          >
+            {draft.status}
+          </Badge>
+        )}
       </div>
 
-      {editing ? (
+      {showNeedsInfo && !editing ? (
+        <div className="mb-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-sm">
+          <div className="mb-1 font-medium text-amber-300">
+            El agente no supo responder — falta contexto
+          </div>
+          <p className="text-zinc-200">
+            {draft.missing ?? "Información insuficiente para responder con certeza."}
+          </p>
+          {hasReply ? (
+            <p className="mt-2 whitespace-pre-wrap text-zinc-100">{draft.content}</p>
+          ) : (
+            <p className="mt-1 text-xs text-zinc-500">
+              Responde tú, o agrega el dato en Notas y vuelve a recibir el mensaje.
+            </p>
+          )}
+        </div>
+      ) : editing ? (
         <Textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
@@ -157,6 +189,15 @@ function DraftCard({
               </Button>
               <Button variant="ghost" size="sm" onClick={() => { setContent(draft.content); setEditing(false); }}>
                 <X className="h-3.5 w-3.5" /> Cancelar
+              </Button>
+            </>
+          ) : showNeedsInfo && !hasReply ? (
+            <>
+              <Button variant="primary" size="sm" onClick={() => setEditing(true)}>
+                <Pencil className="h-3.5 w-3.5" /> Responder yo
+              </Button>
+              <Button variant="danger" size="sm" disabled={busy} onClick={onDiscard}>
+                <Trash2 className="h-3.5 w-3.5" /> Descartar
               </Button>
             </>
           ) : (

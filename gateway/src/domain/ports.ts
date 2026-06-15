@@ -52,6 +52,8 @@ export interface MessageRepository {
   insert(message: Message): Promise<void>;
   updateContent(id: string, content: string): Promise<void>;
   listByChat(filter: MessageListFilter): Promise<MessageView[]>;
+  /** Returns the text content of a single message, or null if missing/empty. */
+  getContent(id: string): Promise<string | null>;
 }
 
 export interface DraftRepository {
@@ -94,7 +96,7 @@ export interface AiService {
     chat_id: string;
     message_text: string;
     sender_name: string | null;
-  }): Promise<{ reply: string }>;
+  }): Promise<{ status: "answer" | "need_info"; reply: string; missing: string | null }>;
   transcribe(audioPath: string): Promise<string>;
   embedAndStore(input: {
     message_id: string;
@@ -126,6 +128,8 @@ export interface EventPublisher {
     id: number;
     chat_id: string;
     content: string;
+    kind?: "reply" | "needs_info";
+    missing?: string | null;
     created_at: string;
   }): void;
 }

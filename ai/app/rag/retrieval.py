@@ -24,11 +24,15 @@ async def search(
     k_chat: int = 8,
     k_label: int = 4,
     k_owner: int = 4,
+    k_contact: int = 6,
 ) -> list[RetrievedMessage]:
     """Top-k retrieval scoped to this chat plus top-k from the label cohort.
 
     The chat-scoped slice captures conversation-specific tone; the label slice
-    pulls in stylistic examples from peer chats with the same label.
+    pulls in stylistic examples from peer chats with the same label; the owner
+    slice pulls background facts. The contact slice grabs the contact's most
+    RECENT messages (by time, not similarity) so the reply can mirror how this
+    person actually writes (slang/register), regardless of the query topic.
     Returned matches include cosine distance from pgvector (0 = identical,
     2 = opposite). With L2-normalised vectors, similarity = 1 - distance/2.
     """
@@ -132,6 +136,46 @@ async def search(
                         from_me=r[4],
                         ts=r[5].isoformat(),
                         distance=float(r[6]),
+                    )
+                )
+
+        # --- Contact recency slice ---
+        # The contact's latest messages (from_me = FALSE), by TIME not similarity:
+        # captures their current lexicon/slang/register so the reply can mirror
+        # "how this person writes" even when the query is unrelated. Queried from
+        # `messages` directly (NOT message_embeddings) on purpose: recency is the
+        # point, so it must include the just-arrived message and any not-yet-
+        # embedded ones (embedding is fire-and-forget, racing this read). Inserted
+        # last; `seen` dedup means it only adds what the slices above didn't pull.
+        # `distance` is a sentinel here (unused — this slice isn't similarity-ranked).
+        if k_contact > 0 and chat_id != OWNER_CHAT_ID:
+            rows = await (
+                await c.execute(
+                    """
+                    SELECT m.id, m.chat_id, m.content, m.from_me, m.ts
+                    FROM messages m
+                    WHERE m.chat_id = %s
+                      AND m.from_me = FALSE
+                      AND m.content IS NOT NULL
+                    ORDER BY m.ts DESC
+                    LIMIT %s
+                    """,
+                    (chat_id, k_contact),
+                )
+            ).fetchall()
+            for r in rows:
+                if r[0] in seen:
+                    continue
+                seen.add(r[0])
+                results.append(
+                    RetrievedMessage(
+                        message_id=r[0],
+                        chat_id=r[1],
+                        label=None,
+                        content=r[2],
+                        from_me=r[3],
+                        ts=r[4].isoformat(),
+                        distance=0.0,
                     )
                 )
 

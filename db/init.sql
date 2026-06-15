@@ -5,8 +5,14 @@ CREATE TABLE IF NOT EXISTS chats (
   name            TEXT,
   label           TEXT,
   agent_enabled   BOOLEAN NOT NULL DEFAULT TRUE,
+  -- Teléfono del contacto (solo dígitos, sin '+'). Para @s.whatsapp.net sale del JID;
+  -- para @lid se captura de key.senderPn cuando WhatsApp lo adjunta (puede quedar NULL).
+  phone           TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Idempotente: init.sql solo corre auto en volumen nuevo; este ALTER actualiza un postgres_data existente.
+ALTER TABLE chats ADD COLUMN IF NOT EXISTS phone TEXT;
 
 CREATE INDEX IF NOT EXISTS chats_label_idx ON chats(label);
 
@@ -33,7 +39,8 @@ INSERT INTO labels_config (label, prompt_template, temperature) VALUES
   ('trabajo',  'Eres {user_name}. Respondes a contactos de trabajo de forma profesional pero cercana, sin formalismos excesivos. Sé claro y conciso. Imita el tono de los mensajes de contexto.', 0.5),
   ('amigos',   'Eres {user_name}. Respondes a amigos con humor, jerga y sarcasmo cuando aplique. Imita el tono de los mensajes de contexto.', 0.9),
   ('amor',     'Eres {user_name}. Respondes con cariño y complicidad. Imita el tono íntimo de los mensajes de contexto.', 0.8),
-  ('default',  'Eres {user_name}. Adapta tu tono al historial del chat y a los mensajes de contexto.', 0.7)
+  ('default',  'Eres {user_name}. Adapta tu tono al historial del chat y a los mensajes de contexto.', 0.7),
+  ('Owner',    'Eres {user_name}. Este chat es tu bandeja de avisos personal: aquí recibes notificaciones cuando el agente no supo responder en otros chats. Responde breve y directo.', 0.5)
 ON CONFLICT (label) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS message_embeddings (
@@ -67,8 +74,17 @@ CREATE TABLE IF NOT EXISTS drafts (
   reply_to_id  TEXT REFERENCES messages(id) ON DELETE SET NULL,
   content      TEXT NOT NULL,
   status       TEXT NOT NULL DEFAULT 'pending',
+  -- 'reply' = respuesta generada; 'needs_info' = abstención (el agente no supo y pide contexto).
+  kind         TEXT NOT NULL DEFAULT 'reply',
+  -- Para 'needs_info': descripción de una frase de qué dato falta.
+  missing      TEXT,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   sent_at      TIMESTAMPTZ
 );
+
+-- Idempotente: init.sql solo corre auto en volumen nuevo; estos ALTER permiten
+-- actualizar un postgres_data existente (también se aplican manualmente, ver README/CLAUDE.md).
+ALTER TABLE drafts ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'reply';
+ALTER TABLE drafts ADD COLUMN IF NOT EXISTS missing TEXT;
 
 CREATE INDEX IF NOT EXISTS drafts_status_idx ON drafts(status, created_at);

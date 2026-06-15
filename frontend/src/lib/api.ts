@@ -26,6 +26,7 @@ export type Chat = {
   name: string | null;
   label: string | null;
   agent_enabled: boolean;
+  phone: string | null;
   msgs: number;
   last_ts: string | null;
 };
@@ -45,6 +46,8 @@ export type Draft = {
   reply_to_id: string | null;
   content: string;
   status: "pending" | "approved" | "sent" | "discarded";
+  kind: "reply" | "needs_info";
+  missing: string | null;
   created_at: string;
   sent_at: string | null;
   chat_name: string | null;
@@ -193,7 +196,10 @@ export const api = {
       return http<Chat[]>(`/api/chats?${search.toString()}`);
     },
     get: (id: string) => http<Chat>(`/api/chats/${encodeURIComponent(id)}`),
-    patch: (id: string, body: { label?: string | null; agent_enabled?: boolean }) =>
+    patch: (
+      id: string,
+      body: { label?: string | null; agent_enabled?: boolean; name?: string | null }
+    ) =>
       http<{ ok: true }>(`/api/chats/${encodeURIComponent(id)}`, {
         method: "PATCH",
         body: JSON.stringify(body),

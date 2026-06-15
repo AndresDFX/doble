@@ -118,7 +118,43 @@ export type ExtractedMessage = {
   type: "text" | "audio" | "image" | "sticker" | "video" | "other";
   text: string | null;
   mediaPath: string | null;
+  phone: string | null;
 };
+
+/**
+ * Extended WAMessageKey fields. Baileys (6.7.x) populates these from the stanza
+ * attrs (`sender_pn`/`participant_pn`) but the base proto type doesn't declare
+ * them, so we read them through a local widening type.
+ */
+type PnKey = { senderPn?: string | null; participantPn?: string | null };
+
+/** Digits-only phone from a JID like "573203510603@s.whatsapp.net" (drops device suffix). */
+function digitsFromJid(jid: string | null | undefined): string | null {
+  if (!jid) return null;
+  const user = jid.split("@")[0]?.split(":")[0]?.trim();
+  return user && /^\d+$/.test(user) ? user : null;
+}
+
+/**
+ * Resolve the CONTACT's phone for a 1:1 chat, only from INBOUND messages.
+ *
+ * For @s.whatsapp.net the number is in the JID; for @lid (a privacy id) WhatsApp
+ * only exposes it via key.senderPn when it chooses to attach it — so it may be
+ * null until an inbound message carries it. We bail on outbound (fromMe) messages
+ * because there key.senderPn is the OWNER's own number, not the contact's, and
+ * persisting it would clobber the contact's real phone. Groups (@g.us) and
+ * unknown servers yield null.
+ */
+function phoneFromKey(key: proto.IMessageKey | null | undefined): string | null {
+  if (key?.fromMe) return null;
+  const remoteJid = key?.remoteJid ?? "";
+  if (remoteJid.endsWith("@s.whatsapp.net")) return digitsFromJid(remoteJid);
+  if (remoteJid.endsWith("@lid")) {
+    const pn = key as (proto.IMessageKey & PnKey) | null;
+    return digitsFromJid(pn?.senderPn ?? pn?.participantPn ?? null);
+  }
+  return null;
+}
 
 export async function extractMessage(
   sock: WASocket,
@@ -139,6 +175,7 @@ export async function extractMessage(
     from_me: !!msg.key.fromMe,
     sender_name: msg.pushName ?? null,
     ts,
+    phone: phoneFromKey(msg.key),
   };
 
   if (message.conversation) {

@@ -26,6 +26,7 @@ import {
   SystemClock,
 } from "../infrastructure/adapters.js";
 import { ProcessIncomingMessage } from "../application/process-incoming-message.js";
+import { RetryNeedInfo } from "../application/retry-need-info.js";
 import type { ReplyDeliveryDeps } from "../application/reply-delivery.js";
 import {
   AgentStateService,
@@ -76,9 +77,22 @@ const processIncomingMessage = new ProcessIncomingMessage({
   logger,
 });
 
+const retryNeedInfo = new RetryNeedInfo({
+  drafts: draftRepo,
+  messages: messageRepo,
+  agentState: agentStateRepo,
+  ai,
+  whatsapp,
+  events,
+  activity: activityLog,
+  clock,
+  logger,
+});
+
 export const container = {
   ai,
   processIncomingMessage,
+  retryNeedInfo,
   agentState: new AgentStateService(agentStateRepo),
   chats: new ChatService(chatRepo, messageRepo),
   drafts: new DraftService(draftRepo, chatRepo, deliveryDeps),
