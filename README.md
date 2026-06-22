@@ -43,11 +43,12 @@ El emparejamiento de WhatsApp se hace **desde el dashboard**: la pestaña "Dashb
 
 ## Desplegar en la nube (Render free tier)
 
-Doble puede correr en **Render** manteniéndose en free tier, con el mismo patrón que el proyecto hermano `telegram-sender`: el gateway corre **always-on** y su **sesión de WhatsApp vive en DynamoDB** (no en disco), así el disco efímero de Render deja de importar y no hay que re-escanear el QR en cada reinicio. El gateway sirve el dashboard en el mismo origen, detrás de **Basic Auth**.
+**Desplegado en producción:** https://doble.onrender.com (dashboard detrás de Basic Auth). Corre como **un solo web service** (gateway + AI + dashboard en un contenedor), con el mismo patrón que el proyecto hermano `telegram-sender`: la **sesión de WhatsApp vive en DynamoDB** (no en disco), así el disco efímero de Render deja de importar y no hay que re-escanear el QR en cada reinicio. El gateway sirve el dashboard en el mismo origen, detrás de **Basic Auth**.
 
-- Blueprint listo: [`render.yaml`](render.yaml) + [`Dockerfile.render`](Dockerfile.render).
-- Postgres+pgvector va en **Neon/Supabase** (free, perpetuo), no en Render.
+- Blueprint listo: [`render.yaml`](render.yaml) + [`Dockerfile.render`](Dockerfile.render) (un solo servicio).
+- Postgres+pgvector en **Supabase** (Session pooler, puerto 5432) o Neon — no en Render.
 - Sesión en DynamoDB vía `WA_AUTH_STORE=dynamo` (ver [auth-state](gateway/src/infrastructure/auth-state.ts)).
+- Vinculación de WhatsApp desde IP residencial con [`npm run link`](gateway/src/scripts/link.ts).
 
 **Guía paso a paso:** [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md) — tabla DynamoDB + IAM, base Neon, deploy de **un solo web service**, **vinculación desde IP residencial** con `npm run link` (Render bloquea el linking desde datacenter) y keep-alive para el sleep de Render Free.
 
@@ -299,7 +300,7 @@ Si había una pregunta pendiente por falta de contexto y luego agregas una **not
 
 ## Estado v1 vs deferido
 
-**Hecho (v1+)**: WhatsApp conectado; RAG por chat + por etiqueta; templates de tono por categoría; transcripción de audios entrantes; on/off global y por chat; modo borrador; **dashboard web (React) con updates en vivo por SSE**; **notas del dueño por audio/texto que alimentan el RAG**; **inspector de RAG** (stats + explorador de retrieval); **feed de actividad en vivo**; **batch sender desde la UI** (cuenta A → agente B); **UI responsive (móvil/tablet)**; **gateway con Clean Architecture**; **publicado en GitHub**; **abstención anti-alucinación** (no inventa: borradores "falta contexto"); **avisos por WhatsApp** vía etiqueta reservada `Owner`; **auto-respuesta al agregar contexto** (reevalúa pendientes al guardar una nota); **adaptación de registro por chat** + base colombiana + respuestas cortas/humanas; **regla anti-invención de nombres**; **identificación automática de contactos** (nombre desde agenda/pushName, sin pisar lo manual); **edición de nombre y teléfono por chat** en el dashboard; **desplegable en Render free tier** (sesión Baileys en DynamoDB + Basic Auth).
+**Hecho (v1+)**: WhatsApp conectado; RAG por chat + por etiqueta; templates de tono por categoría; transcripción de audios entrantes; on/off global y por chat; modo borrador; **dashboard web (React) con updates en vivo por SSE**; **notas del dueño por audio/texto que alimentan el RAG**; **inspector de RAG** (stats + explorador de retrieval); **feed de actividad en vivo**; **batch sender desde la UI** (cuenta A → agente B); **UI responsive (móvil/tablet)**; **gateway con Clean Architecture**; **publicado en GitHub**; **abstención anti-alucinación** (no inventa: borradores "falta contexto"); **avisos por WhatsApp** vía etiqueta reservada `Owner`; **auto-respuesta al agregar contexto** (reevalúa pendientes al guardar una nota); **adaptación de registro por chat** + base colombiana + respuestas cortas/humanas; **regla anti-invención de nombres**; **identificación automática de contactos** (nombre desde agenda/pushName, sin pisar lo manual); **edición de nombre y teléfono por chat** en el dashboard; **desplegado en Render free tier** (https://doble.onrender.com — un solo web service, sesión Baileys en DynamoDB, Postgres en Supabase, Basic Auth).
 
 **Diferido a v2+**: TTS / clonación de voz · stickers con visión · resúmenes diarios · notificaciones por Telegram (los avisos por WhatsApp + la revisión de borradores ya cubren la aprobación humana) · scheduler horario · multi-tenancy · Stripe · self-hosting (ollama + whisper.cpp + nomic-embed-text).
 

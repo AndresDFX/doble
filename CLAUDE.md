@@ -143,5 +143,5 @@ Pseudo-chat reservado con `chat_id = '__owner__'` y `label = '__owner__'`, gesti
 - Sesión Baileys (disco vs DynamoDB): [gateway/src/infrastructure/auth-state.ts](gateway/src/infrastructure/auth-state.ts) + [dynamo-auth.ts](gateway/src/infrastructure/dynamo-auth.ts)
 - Identificación de contactos (nombre desde agenda/pushName, precedencia manual>contact>push): [gateway/src/infrastructure/contact-sync.ts](gateway/src/infrastructure/contact-sync.ts) → `chats.name` + columna `name_source`. Solo nombra conversaciones existentes (no inserta la agenda entera).
 - Basic Auth + serving del SPA (Render): [gateway/src/api/hosting.ts](gateway/src/api/hosting.ts)
-- Despliegue en Render (free tier, un solo web service): [render.yaml](render.yaml) + [Dockerfile.render](Dockerfile.render) + [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md)
+- Despliegue en Render (free tier, un solo web service — **vivo en https://doble.onrender.com**): [render.yaml](render.yaml) + [Dockerfile.render](Dockerfile.render) + [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md). Postgres en Supabase (Session pooler :5432); el gateway activa TLS según `sslmode` ([db.ts](gateway/src/db.ts)).
 - Vinculación local de WhatsApp para Render (`npm run link`): [gateway/src/scripts/link.ts](gateway/src/scripts/link.ts)

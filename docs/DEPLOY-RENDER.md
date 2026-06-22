@@ -1,5 +1,8 @@
 # Desplegar Doble en Render (free tier)
 
+> ✅ **Desplegado:** https://doble.onrender.com — `db:ok`, `ai:ok` con Supabase. Falta
+> solo vincular WhatsApp (§4) para que `wa` pase de `connecting` a `open`.
+
 **Un solo web service** corre todo el stack (gateway + AI + dashboard) en un
 contenedor. La **sesión de WhatsApp vive en DynamoDB**, no en disco — así el disco
 efímero de Render deja de importar (reinicios/spin-down **no** exigen re-escanear
@@ -144,12 +147,15 @@ npm run link -- --reset               # si quedó en mal estado: borra y reinten
 
 El script imprime contra qué store va a vincular (confírmalo: debe decir
 **DynamoDB** con tu tabla). Cuando muestre **`✅ CONECTADO`**, la sesión ya quedó en
-DynamoDB; cierra con **Ctrl-C**. El servicio de Render la tomará en su próximo
-arranque/deploy **sin QR**.
+DynamoDB; cierra con **Ctrl-C**.
+
+**3) Reinicia el servicio en Render** (Dashboard → tu servicio → **Manual Deploy →
+Restart service**). El servicio ya venía corriendo con la sesión vacía; al
+reiniciar relee las credenciales desde DynamoDB y `/api/health` pasa a `wa: open`.
 
 > **Un solo host activo a la vez.** No dejes el link local y el servicio de Render
 > conectados con la misma sesión al tiempo: WhatsApp solo admite un socket por
-> credencial y se patean (error 440). Vincula local, ciérralo, deja Render.
+> credencial y se patean (error 440). Vincula local, ciérralo, **luego** reinicia Render.
 >
 > Si `--pair`/QR falla repetidamente, WhatsApp bloquea ~30–60 min: espera y
 > reintenta **una** vez. Ten el teléfono con WhatsApp actualizado y ≤4 dispositivos
@@ -165,7 +171,7 @@ Mantenlo despierto con un ping externo a `/api/health` (queda fuera del Basic Au
 cada <15 min — p. ej. [cron-job.org](https://cron-job.org) o UptimeRobot:
 
 ```
-GET https://doble-xxxx.onrender.com/api/health   cada 10 min
+GET https://doble.onrender.com/api/health   cada 10 min
 ```
 
 > Aun con keep-alive, Render recicla instancias y los redeploys cortan el socket;
