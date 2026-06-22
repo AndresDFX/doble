@@ -1,14 +1,15 @@
-# Single-service image for Render (or any ephemeral-disk host): builds the
-# frontend and runs the gateway, which serves the SPA same-origin as /api.
-# Build context = repo root (needs both gateway/ and frontend/).
+# Single-service image for Render: runs the WHOLE stack in one container so you
+# only configure ONE web service. The Python AI service listens on localhost,
+# the Node gateway serves the dashboard (SPA) + API on $PORT and talks to the AI
+# at 127.0.0.1:8000. Postgres is external (Neon/Supabase); the WhatsApp session
+# lives in DynamoDB (WA_AUTH_STORE=dynamo). See docs/DEPLOY-RENDER.md.
 #
 #   docker build -f Dockerfile.render -t doble .
 #
-# Pair with WA_AUTH_STORE=dynamo so the WhatsApp session lives in DynamoDB and
-# survives spin-down without re-scanning the QR. See docs/DEPLOY-RENDER.md.
+# Build context = repo root (needs gateway/, frontend/ and ai/).
 
 # 1) Build the React dashboard -> /app/frontend/dist
-FROM node:20-alpine AS frontend-build
+FROM node:20-bookworm-slim AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install --no-audit --no-fund
@@ -16,25 +17,47 @@ COPY frontend/ ./
 RUN npm run build
 
 # 2) Install the gateway dependencies (incl. tsx; Baileys pulls a couple of git deps)
-FROM node:20-alpine AS gateway-deps
+FROM node:20-bookworm-slim AS gateway-deps
 WORKDIR /app/gateway
-RUN apk add --no-cache git python3 make g++ \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
     && git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" \
     && git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 COPY gateway/package.json gateway/package-lock.json* ./
 RUN npm install --omit=optional --no-audit --no-fund
 
-# 3) Runtime: gateway + the built SPA
-FROM node:20-alpine AS runtime
-WORKDIR /app/gateway
+# 3) Runtime: Node + Python, both apps in one image
+FROM node:20-bookworm-slim AS runtime
+WORKDIR /app
 ENV NODE_ENV=production
-# Gateway serves the dashboard from here, same-origin as the API.
-ENV FRONTEND_DIST=/app/frontend-dist
-COPY --from=gateway-deps /app/gateway/node_modules ./node_modules
-COPY gateway/package.json gateway/tsconfig.json ./
-COPY gateway/src ./src
+
+# Python for the AI service, isolated in a venv (Debian 12 is PEP-668 managed).
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/aienv
+ENV PATH="/opt/aienv/bin:$PATH"
+
+# AI service dependencies (wheels — no compiler needed) then its code.
+COPY ai/pyproject.toml /app/ai/pyproject.toml
+RUN /opt/aienv/bin/pip install --no-cache-dir --upgrade pip \
+    && /opt/aienv/bin/pip install --no-cache-dir -e /app/ai
+COPY ai/app /app/ai/app
+COPY ai/run.py /app/ai/run.py
+
+# Gateway: deps + source + the built SPA it will serve.
+COPY --from=gateway-deps /app/gateway/node_modules /app/gateway/node_modules
+COPY gateway/package.json gateway/tsconfig.json /app/gateway/
+COPY gateway/src /app/gateway/src
 COPY --from=frontend-build /app/frontend/dist /app/frontend-dist
-# Media still goes to local disk (ephemeral — fine, transcripts are persisted in DB).
 RUN mkdir -p /app/gateway/.wa-media
+
+# Gateway serves the SPA same-origin; the AI runs on localhost (internal only).
+ENV FRONTEND_DIST=/app/frontend-dist
+ENV AI_SERVICE_URL=http://127.0.0.1:8000
+ENV AI_SERVICE_HOST=127.0.0.1
+ENV AI_SERVICE_PORT=8000
+
 EXPOSE 3000
-CMD ["npx", "tsx", "src/index.ts"]
+# Start the AI in the background, then run the gateway as the main process
+# (binds Render's $PORT, serves the dashboard, connects to the AI at :8000).
+CMD ["sh", "-c", "(/opt/aienv/bin/python /app/ai/run.py --no-reload &) ; cd /app/gateway && exec npx tsx src/index.ts"]

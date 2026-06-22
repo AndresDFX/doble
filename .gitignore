@@ -1,5 +1,8 @@
 .env
 .env.local
+# Any local env file (e.g. .env.aws with AWS creds) — never commit secrets.
+.env.*
+!.env.example
 
 node_modules/
 dist/
