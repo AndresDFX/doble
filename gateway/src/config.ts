@@ -49,4 +49,11 @@ export const config = {
   // same-origin as /api. Used on Render so one service + one Basic Auth prompt
   // covers both. Unset in docker-compose (nginx serves the frontend there).
   frontendDist: process.env.FRONTEND_DIST ?? "",
+
+  // Proactive scheduler: periodic, per-chat unprompted messages. Master switch
+  // (PROACTIVE_SCHEDULER=off disables the loop entirely) + how often it ticks.
+  // The per-chat interval range lives in the DB (defaults 1–60 min) and is set
+  // per chat from the dashboard/CLI — not from env.
+  proactiveSchedulerEnabled: (process.env.PROACTIVE_SCHEDULER ?? "on") !== "off",
+  proactiveTickMs: Number(process.env.PROACTIVE_TICK_MS ?? 30000),
 };

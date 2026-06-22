@@ -25,6 +25,7 @@ async def search(
     k_label: int = 4,
     k_owner: int = 4,
     k_contact: int = 6,
+    max_distance: float | None = 1.0,
 ) -> list[RetrievedMessage]:
     """Top-k retrieval scoped to this chat plus top-k from the label cohort.
 
@@ -35,6 +36,13 @@ async def search(
     person actually writes (slang/register), regardless of the query topic.
     Returned matches include cosine distance from pgvector (0 = identical,
     2 = opposite). With L2-normalised vectors, similarity = 1 - distance/2.
+
+    `max_distance` gates the THREE similarity slices (chat, label, owner): a row
+    farther than this is dropped so off-topic matches don't enter the prompt as
+    "relevant history/background" — the main cause of context confusion (e.g. an
+    arrival-time note bleeding into a "what did you eat?" question). The recency
+    slice is exempt (it's ranked by time, for register, not relevance). Pass
+    None to disable (the /retrieve inspector does, to show every distance).
     """
     vec = np.asarray(embedding, dtype=np.float32)
     seen: set[str] = set()
@@ -57,6 +65,9 @@ async def search(
             )
         ).fetchall()
         for r in rows:
+            dist = float(r[6])
+            if max_distance is not None and dist > max_distance:
+                break  # rows are sorted by distance asc; the rest are farther
             if r[0] in seen:
                 continue
             seen.add(r[0])
@@ -68,7 +79,7 @@ async def search(
                     content=r[3],
                     from_me=r[4],
                     ts=r[5].isoformat(),
-                    distance=float(r[6]),
+                    distance=dist,
                 )
             )
 
@@ -92,6 +103,9 @@ async def search(
                 )
             ).fetchall()
             for r in rows:
+                dist = float(r[6])
+                if max_distance is not None and dist > max_distance:
+                    break  # rows are sorted by distance asc; the rest are farther
                 if r[0] in seen:
                     continue
                 seen.add(r[0])
@@ -103,7 +117,7 @@ async def search(
                         content=r[3],
                         from_me=r[4],
                         ts=r[5].isoformat(),
-                        distance=float(r[6]),
+                        distance=dist,
                     )
                 )
 
@@ -124,6 +138,9 @@ async def search(
                 )
             ).fetchall()
             for r in rows:
+                dist = float(r[6])
+                if max_distance is not None and dist > max_distance:
+                    break  # rows are sorted by distance asc; the rest are farther
                 if r[0] in seen:
                     continue
                 seen.add(r[0])
@@ -135,7 +152,7 @@ async def search(
                         content=r[3],
                         from_me=r[4],
                         ts=r[5].isoformat(),
-                        distance=float(r[6]),
+                        distance=dist,
                     )
                 )
 
@@ -180,6 +197,77 @@ async def search(
                 )
 
     return results
+
+
+async def recent_messages(chat_id: str, limit: int = 12) -> list[RetrievedMessage]:
+    """Last `limit` messages of a chat by TIME (both directions), oldest→newest.
+
+    Used by the proactive generator: there's no incoming message to embed, so
+    "latest context" is just the recent back-and-forth, read straight from
+    `messages` (not `message_embeddings`) so it includes not-yet-embedded rows.
+    `distance` is a sentinel (this slice isn't similarity-ranked).
+    """
+    async with conn() as c:
+        rows = await (
+            await c.execute(
+                """
+                SELECT m.id, m.chat_id, m.content, m.from_me, m.ts
+                FROM messages m
+                WHERE m.chat_id = %s
+                  AND m.content IS NOT NULL
+                ORDER BY m.ts DESC
+                LIMIT %s
+                """,
+                (chat_id, limit),
+            )
+        ).fetchall()
+    rows = list(reversed(rows))  # chronological: oldest first, newest last
+    return [
+        RetrievedMessage(
+            message_id=r[0],
+            chat_id=r[1],
+            label=None,
+            content=r[2],
+            from_me=r[3],
+            ts=r[4].isoformat(),
+            distance=0.0,
+        )
+        for r in rows
+    ]
+
+
+async def recent_owner_notes(limit: int = 4) -> list[RetrievedMessage]:
+    """Most recent owner notes (background facts) — by time, not similarity.
+
+    The proactive generator has no query embedding to rank notes by, so it pulls
+    a few recent ones as factual background (never as style examples).
+    """
+    async with conn() as c:
+        rows = await (
+            await c.execute(
+                """
+                SELECT m.id, m.chat_id, m.content, m.from_me, m.ts
+                FROM messages m
+                WHERE m.chat_id = %s
+                  AND m.content IS NOT NULL
+                ORDER BY m.ts DESC
+                LIMIT %s
+                """,
+                (OWNER_CHAT_ID, limit),
+            )
+        ).fetchall()
+    return [
+        RetrievedMessage(
+            message_id=r[0],
+            chat_id=r[1],
+            label=None,
+            content=r[2],
+            from_me=r[3],
+            ts=r[4].isoformat(),
+            distance=0.0,
+        )
+        for r in rows
+    ]
 
 
 async def store_embedding(

@@ -40,6 +40,7 @@ import type {
   RetrieveResult,
 } from "../domain/ports.js";
 import { deliverReply, type ReplyDeliveryDeps } from "./reply-delivery.js";
+import { clampMinutes, nextProactiveAt } from "../domain/proactive-policy.js";
 
 // --- Agent state ------------------------------------------------------------
 
@@ -58,7 +59,8 @@ export class AgentStateService {
 export class ChatService {
   constructor(
     private readonly chats: ChatRepository,
-    private readonly messages: MessageRepository
+    private readonly messages: MessageRepository,
+    private readonly clock: Clock
   ) {}
   list(filter: ChatListFilter): Promise<ChatWithStats[]> {
     return this.chats.list(filter);
@@ -66,8 +68,36 @@ export class ChatService {
   get(id: string): Promise<ChatWithStats | null> {
     return this.chats.getWithStats(id);
   }
-  patch(id: string, patch: ChatPatch): Promise<void> {
-    return this.chats.patch(id, patch);
+
+  /**
+   * Patch a chat, applying proactive-scheduling side effects: enabling proactive
+   * (when not already scheduled) seeds the first `proactive_next_ts`; disabling
+   * clears it. Ranges are clamped defensively. The scheduler owns reschedules
+   * thereafter — this only handles the on/off transitions from the UI/CLI.
+   */
+  async patch(id: string, patch: ChatPatch): Promise<void> {
+    const next: ChatPatch = { ...patch };
+    if (next.proactive_min_minutes !== undefined) {
+      next.proactive_min_minutes = clampMinutes(next.proactive_min_minutes);
+    }
+    if (next.proactive_max_minutes !== undefined) {
+      next.proactive_max_minutes = clampMinutes(next.proactive_max_minutes);
+    }
+
+    if (next.proactive_enabled === false) {
+      next.proactive_next_ts = null;
+    } else if (next.proactive_enabled === true) {
+      const chat = await this.chats.get(id);
+      // Only seed a schedule if there isn't one — so re-saving an already-enabled
+      // chat (e.g. just changing the range) doesn't reset its cadence.
+      if (!chat?.proactive_next_ts) {
+        const min = next.proactive_min_minutes ?? chat?.proactive_min_minutes ?? 1;
+        const max = next.proactive_max_minutes ?? chat?.proactive_max_minutes ?? 60;
+        next.proactive_next_ts = nextProactiveAt(this.clock.now(), min, max);
+      }
+    }
+
+    return this.chats.patch(id, next);
   }
   listMessages(filter: MessageListFilter): Promise<MessageView[]> {
     return this.messages.listByChat(filter);
@@ -129,7 +159,12 @@ export class LabelService {
     return this.labels.list();
   }
   upsert(label: Label): Promise<void> {
-    return this.labels.upsert({ ...label, temperature: label.temperature ?? 0.7 });
+    return this.labels.upsert({
+      ...label,
+      temperature: label.temperature ?? 0.7,
+      max_distance: label.max_distance ?? 1.3,
+      examples: label.examples ?? null,
+    });
   }
   patch(label: string, patch: LabelPatch): Promise<void> {
     return this.labels.patch(label, patch);

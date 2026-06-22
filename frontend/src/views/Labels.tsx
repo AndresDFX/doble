@@ -21,8 +21,10 @@ export function Labels() {
   });
 
   const patch = useMutation({
-    mutationFn: (input: { label: string; body: { prompt_template?: string; temperature?: number } }) =>
-      api.labels.patch(input.label, input.body),
+    mutationFn: (input: {
+      label: string;
+      body: { prompt_template?: string; temperature?: number; max_distance?: number };
+    }) => api.labels.patch(input.label, input.body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["labels"] });
       toast.success("Etiqueta actualizada");
@@ -73,28 +75,80 @@ function NewLabelForm({
   onCreate,
   onCancel,
 }: {
-  onCreate: (v: { label: string; prompt_template: string; temperature: number }) => void;
+  onCreate: (v: {
+    label: string;
+    prompt_template: string;
+    temperature: number;
+    max_distance: number;
+    examples: string | null;
+  }) => void;
   onCancel: () => void;
 }) {
   const [label, setLabel] = useState("");
   const [tpl, setTpl] = useState("Eres {user_name}. ");
   const [temp, setTemp] = useState(0.7);
+  const [maxDist, setMaxDist] = useState(1.3);
+  const [ex, setEx] = useState("");
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <Input placeholder="nombre (ej: clientes)" value={label} onChange={(e) => setLabel(e.target.value.toLowerCase())} />
-        <Input
-          type="number"
-          step="0.1"
-          min={0}
-          max={2}
-          value={temp}
-          onChange={(e) => setTemp(parseFloat(e.target.value))}
-        />
+      <Input
+        placeholder="nombre (ej: clientes)"
+        value={label}
+        onChange={(e) => setLabel(e.target.value.toLowerCase())}
+      />
+      <Textarea
+        value={tpl}
+        onChange={(e) => setTpl(e.target.value)}
+        rows={4}
+        placeholder="Persona + límites (ej: Eres {user_name}. … LÍMITES: no inventes …)"
+      />
+      <Textarea
+        value={ex}
+        onChange={(e) => setEx(e.target.value)}
+        rows={3}
+        placeholder={'Ejemplos de tu estilo (opcional)\nContacto: "..." -> "..."'}
+      />
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-xs text-zinc-400">
+          temperature
+          <Input
+            type="number"
+            step="0.1"
+            min={0}
+            max={2}
+            value={temp}
+            onChange={(e) => setTemp(parseFloat(e.target.value))}
+            className="h-7 w-20 text-xs"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-zinc-400">
+          max_distance
+          <Input
+            type="number"
+            step="0.1"
+            min={0}
+            max={2}
+            value={maxDist}
+            onChange={(e) => setMaxDist(parseFloat(e.target.value))}
+            className="h-7 w-20 text-xs"
+          />
+        </label>
       </div>
-      <Textarea value={tpl} onChange={(e) => setTpl(e.target.value)} rows={4} />
       <div className="flex gap-2">
-        <Button variant="primary" size="sm" disabled={!label || !tpl} onClick={() => onCreate({ label, prompt_template: tpl, temperature: temp })}>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!label || !tpl}
+          onClick={() =>
+            onCreate({
+              label,
+              prompt_template: tpl,
+              temperature: temp,
+              max_distance: maxDist,
+              examples: ex.trim() || null,
+            })
+          }
+        >
           <Save className="h-3.5 w-3.5" /> Crear
         </Button>
         <Button variant="ghost" size="sm" onClick={onCancel}>
@@ -111,12 +165,23 @@ function LabelEditor({
   onDelete,
 }: {
   label: Label;
-  onSave: (body: { prompt_template?: string; temperature?: number }) => void;
+  onSave: (body: {
+    prompt_template?: string;
+    temperature?: number;
+    max_distance?: number;
+    examples?: string | null;
+  }) => void;
   onDelete: () => void;
 }) {
   const [tpl, setTpl] = useState(label.prompt_template);
   const [temp, setTemp] = useState(label.temperature);
-  const dirty = tpl !== label.prompt_template || temp !== label.temperature;
+  const [maxDist, setMaxDist] = useState(label.max_distance);
+  const [ex, setEx] = useState(label.examples ?? "");
+  const dirty =
+    tpl !== label.prompt_template ||
+    temp !== label.temperature ||
+    maxDist !== label.max_distance ||
+    (ex.trim() || null) !== (label.examples ?? null);
 
   return (
     <Card>
@@ -131,24 +196,55 @@ function LabelEditor({
       </CardHeader>
       <CardBody className="space-y-2">
         <Textarea value={tpl} onChange={(e) => setTpl(e.target.value)} rows={4} />
+        <label className="block text-xs text-zinc-500">
+          Ejemplos de estilo (few-shot, opcional)
+          <Textarea
+            value={ex}
+            onChange={(e) => setEx(e.target.value)}
+            rows={3}
+            className="mt-1"
+            placeholder={'Contacto: "..." -> "..."'}
+          />
+        </label>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <label className="flex items-center gap-2 text-xs text-zinc-400">
-            temperature
-            <Input
-              type="number"
-              step="0.1"
-              min={0}
-              max={2}
-              value={temp}
-              onChange={(e) => setTemp(parseFloat(e.target.value))}
-              className="h-7 w-20 text-xs"
-            />
-          </label>
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-xs text-zinc-400">
+              temperature
+              <Input
+                type="number"
+                step="0.1"
+                min={0}
+                max={2}
+                value={temp}
+                onChange={(e) => setTemp(parseFloat(e.target.value))}
+                className="h-7 w-20 text-xs"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-zinc-400">
+              max_distance
+              <Input
+                type="number"
+                step="0.1"
+                min={0}
+                max={2}
+                value={maxDist}
+                onChange={(e) => setMaxDist(parseFloat(e.target.value))}
+                className="h-7 w-20 text-xs"
+              />
+            </label>
+          </div>
           <Button
             size="sm"
             variant="primary"
             disabled={!dirty}
-            onClick={() => onSave({ prompt_template: tpl, temperature: temp })}
+            onClick={() =>
+              onSave({
+                prompt_template: tpl,
+                temperature: temp,
+                max_distance: maxDist,
+                examples: ex.trim() || null,
+              })
+            }
           >
             <Save className="h-3.5 w-3.5" /> Guardar
           </Button>

@@ -50,6 +50,16 @@ export type Chat = {
   agent_enabled: boolean;
   /** Contact phone (digits only, no '+'). Null when unknown (e.g. @lid not yet shared). */
   phone: string | null;
+  /**
+   * Proactive messaging: when on, the scheduler periodically writes an
+   * unprompted message to this chat (in the owner's voice, from the latest
+   * context) at a random interval in [min, max] minutes. Opt-in per chat.
+   */
+  proactive_enabled: boolean;
+  proactive_min_minutes: number;
+  proactive_max_minutes: number;
+  /** ISO timestamp of the next scheduled proactive send; null when unscheduled. */
+  proactive_next_ts: string | null;
 };
 export type ChatWithStats = Chat & {
   msgs: number;
@@ -61,7 +71,16 @@ export type ChatUpsert = {
   label?: string | null;
   phone?: string | null;
 };
-export type ChatPatch = { label?: string | null; agent_enabled?: boolean; name?: string | null };
+export type ChatPatch = {
+  label?: string | null;
+  agent_enabled?: boolean;
+  name?: string | null;
+  proactive_enabled?: boolean;
+  proactive_min_minutes?: number;
+  proactive_max_minutes?: number;
+  /** Internal: set by ChatService/scheduler, never accepted straight from the HTTP body. */
+  proactive_next_ts?: Date | null;
+};
 export type ChatListFilter = { label?: string; q?: string; limit?: number; offset?: number };
 
 /**
@@ -143,9 +162,22 @@ export type DraftListFilter = { status?: string; chatId?: string; limit?: number
 export type DraftPatch = { status?: "approved" | "discarded"; content?: string };
 
 // --- Labels ------------------------------------------------------------------
-export type Label = { label: string; prompt_template: string; temperature: number };
+export type Label = {
+  label: string;
+  prompt_template: string;
+  temperature: number;
+  // Umbral de relevancia del RAG (distancia coseno máx.) para esta etiqueta.
+  max_distance: number;
+  // Few-shot "de oro": ejemplos curados del estilo del dueño para esta etiqueta.
+  examples: string | null;
+};
 export type LabelWithStats = Label & { chats: number };
-export type LabelPatch = { prompt_template?: string; temperature?: number };
+export type LabelPatch = {
+  prompt_template?: string;
+  temperature?: number;
+  max_distance?: number;
+  examples?: string | null;
+};
 
 // --- Owner notes -------------------------------------------------------------
 export type OwnerNote = {

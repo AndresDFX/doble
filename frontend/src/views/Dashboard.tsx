@@ -1,13 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type AgentState } from "../lib/api";
-import { Card, CardBody, CardHeader, CardTitle, Switch, StatusDot, Badge, Input } from "../components/ui";
+import { Button, Card, CardBody, CardHeader, CardTitle, Switch, StatusDot, Badge, Input } from "../components/ui";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 export function Dashboard() {
   const qc = useQueryClient();
   const healthQ = useQuery({ queryKey: ["health"], queryFn: api.health, refetchInterval: 10_000 });
-  const waQ = useQuery({ queryKey: ["wa"], queryFn: api.wa.status });
+  const waQ = useQuery({
+    queryKey: ["wa"],
+    queryFn: api.wa.status,
+    // While not connected, poll so a freshly generated QR shows up even if an
+    // SSE event is missed.
+    refetchInterval: (q) => (q.state.data?.connection === "open" ? false : 4000),
+  });
   const stateQ = useQuery({ queryKey: ["state"], queryFn: api.state.get });
 
   const patchState = useMutation({
@@ -16,6 +22,12 @@ export function Dashboard() {
       qc.setQueryData(["state"], next);
       toast.success("Estado actualizado");
     },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const relink = useMutation({
+    mutationFn: api.wa.relink,
+    onSuccess: () => toast.success("Revinculando… escanea el QR cuando aparezca"),
     onError: (err: Error) => toast.error(err.message),
   });
 
@@ -69,6 +81,25 @@ export function Dashboard() {
           {wa?.lastError ? (
             <p className="mt-3 text-xs text-red-400">Último error: {wa.lastError}</p>
           ) : null}
+          <div className="mt-4 flex justify-center border-t border-zinc-800 pt-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={relink.isPending}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Esto cierra la sesión actual de WhatsApp y pide escanear un QR nuevo. ¿Continuar?"
+                  )
+                ) {
+                  relink.mutate();
+                }
+              }}
+            >
+              {relink.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Revincular dispositivo
+            </Button>
+          </div>
         </CardBody>
       </Card>
 

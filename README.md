@@ -10,9 +10,9 @@
 
 ## Componentes
 
-- `gateway/` — Node.js + Baileys + **Fastify HTTP API** (REST + SSE), estructurado con **Clean Architecture** (`domain` / `application` / `infrastructure`; ver [CLAUDE.md](CLAUDE.md)). Sesión de WhatsApp, recepción de mensajes, envío de respuestas, y endpoints `/api/*` que consume el frontend.
+- `gateway/` — Node.js + Baileys + **Fastify HTTP API** (REST + SSE), estructurado con **Clean Architecture** (`domain` / `application` / `infrastructure`; ver [CLAUDE.md](CLAUDE.md)). Sesión de WhatsApp, recepción de mensajes, envío de respuestas, **scheduler de mensajes proactivos** (loop en segundo plano), y endpoints `/api/*` que consume el frontend.
 - `ai/` — Python + FastAPI. Embeddings, retrieval RAG (pgvector), generación con **Gemini 2.5 Flash** (salida estructurada `{status, reply, missing}` para **abstenerse cuando falta contexto**), transcripción multimodal con el mismo modelo (sin Whisper).
-- `frontend/` — **React 19 + Vite + Tailwind v4 + TanStack Query**. Dashboard de administración: estado de servicios, gestión de chats/etiquetas (con **edición de nombre** y **teléfono** por chat), revisión de borradores (incluidos los avisos de **falta de contexto**), edición de prompts. Updates en tiempo real vía SSE.
+- `frontend/` — **React 19 + Vite + Tailwind v4 + TanStack Query**. Dashboard de administración: estado de servicios, gestión de chats/etiquetas (con **edición de nombre** y **teléfono** por chat, y activación de **mensajes proactivos** con su rango por chat), revisión de borradores (incluidos los avisos de **falta de contexto**), edición de prompts. Updates en tiempo real vía SSE.
 - `db/init.sql` — schema de Postgres con extensión pgvector y datos iniciales.
 - `docker-compose.yml` — stack completo: postgres + ai + gateway + frontend.
 
@@ -157,6 +157,8 @@ npm run cli -- chat list                # ver todos los chats con etiqueta
 npm run cli -- chat list familia        # filtrar por etiqueta
 npm run cli -- chat disable <chat_jid>  # apagar agente solo para ese chat
 npm run cli -- chat label <chat_jid> trabajo   # asignar etiqueta manualmente
+npm run cli -- chat proactive <chat_jid> on    # mensajes proactivos para ese chat
+npm run cli -- chat proactive-range <chat_jid> 5 45   # intervalo aleatorio 5-45 min
 ```
 
 ### Borradores (cuando draft_mode = on)
@@ -246,9 +248,9 @@ Filtra por categoría con los chips superiores o busca por texto libre. Los even
 
 ## Etiquetas
 
-El sistema lee las **etiquetas nativas de WhatsApp** (Familia, Trabajo, Amigos, Amor) y las mapea a templates de prompt. Cada etiqueta tiene su propia `temperature` y plantilla de tono (ver `db/init.sql`).
+El sistema lee las **etiquetas nativas de WhatsApp** (Familia, Trabajo, Amigos, Amor) y las mapea a templates de prompt. Cada etiqueta tiene su propia `temperature`, una **plantilla de tono con límites por relación**, un **umbral de relevancia del RAG (`max_distance`)** y **ejemplos few-shot (`examples`)** — todo **editable desde la pestaña Etiquetas del dashboard** (sin tocar SQL), o directo en `db/init.sql` / `labels_config`. La `temperature` además se **ajusta dinámicamente** por mensaje: baja para preguntas factuales (más precisa), se mantiene para charla social (más natural).
 
-Para personalizar el prompt de una etiqueta:
+Para personalizar el prompt de una etiqueta por SQL (alternativa a la UI):
 
 ```sql
 UPDATE labels_config
@@ -275,7 +277,10 @@ Solo se dirige al contacto por su nombre si el chat tiene **nombre asignado**. S
 Ese nombre se **identifica automáticamente** desde WhatsApp (igual que en el proyecto de referencia): el gateway escucha los eventos de contactos (`contacts.upsert`/`update`, `messaging-history.set`) y el `pushName` de los mensajes, y rellena el nombre del chat. Precedencia, de mayor a menor: **manual** (lo que edites en la pestaña Chats) → **agenda** (nombre guardado en tu WhatsApp) → **pushName** (nombre auto-reportado del contacto). Una fuente nunca pisa a otra de mayor precedencia, así que tu edición manual siempre gana. Los nombres solo se aplican a **conversaciones existentes** (no llena la lista con toda tu agenda), y si hay pocos nombres el gateway re-sincroniza la libreta sin re-vincular.
 
 ### Cuando no sabe, se abstiene (no alucina)
-Si responder requiere un dato concreto que **no** está en el contexto ni en tus notas, el agente no inventa: el servicio `ai` devuelve `status = "need_info"` y, en vez de mandar algo inventado, se crea un **borrador "falta contexto"** en el dashboard indicando qué dato falta. El modelo decide entre `answer` y `need_info` vía salida estructurada `{status, reply, missing}`.
+Si responder requiere un dato concreto que **no** está en el contexto ni en tus notas, el agente no inventa: el servicio `ai` devuelve `status = "need_info"` y, en vez de mandar algo inventado, se crea un **borrador "falta contexto"** en el dashboard indicando qué dato falta. El modelo decide entre `answer` y `need_info` vía salida estructurada `{status, reply, missing}`. Tampoco **mezcla contextos**: si tiene un dato de otro tema (otra hora, otro plan), no lo sustituye por la respuesta — se abstiene.
+
+### No decide compromisos por ti
+Si un mensaje te pide aceptar o confirmar algo que te **ata en el mundo real** (un plan, una cita, una hora/lugar de encuentro, un favor, un préstamo, una promesa), el agente **no decide por ti**: se abstiene y te avisa (igual que con la falta de contexto), para que **tú** confirmes. No responde "sí"/"de una"/"va" a un compromiso. La charla casual y la cortesía siguen fluyendo normal.
 
 ### Avisos por WhatsApp: etiqueta `Owner`
 Marca con la etiqueta reservada **`Owner`** el chat que quieras (típicamente el tuyo). Cuando el agente se abstiene en **cualquier** chat, te llega un **aviso por WhatsApp** a ese chat con quién preguntó, qué decía y qué dato falta. Si ningún chat tiene la etiqueta, solo queda el borrador en el dashboard.
@@ -284,6 +289,21 @@ Marca con la etiqueta reservada **`Owner`** el chat que quieras (típicamente el
 Si había una pregunta pendiente por falta de contexto y luego agregas una **nota** (pestaña Notas) con esa información, el agente **reevalúa lo pendiente y responde solo** — sin esperar a que el contacto vuelva a insistir. La entrega respeta `draft_mode`: borrador si está activo, envío automático si lo apagaste.
 
 > **`draft_mode` controla la entrega, no el comportamiento.** El agente siempre genera/reevalúa respuestas; `draft_mode = TRUE` las deja como borrador para que las revises, `FALSE` las envía solas. Esto aplica tanto a mensajes entrantes como a la auto-respuesta de arriba.
+
+## Mensajes proactivos (el agente escribe primero)
+
+Además de responder, Doble puede **escribir por iniciativa propia** en los chats que actives: cada cierto **tiempo aleatorio** retoma la conversación con un mensaje corto y natural, **tomando siempre el último contexto** del chat. Es **opt-in por chat** y está **apagado por defecto**.
+
+- **Activación por chat**: en la pestaña **Chats**, junto al switch del agente hay un switch **Proactivo**. Al activarlo aparecen dos campos para el **rango en minutos** (mín–máx, p. ej. `1`–`60`). El agente elige un intervalo aleatorio dentro de ese rango y, al disparar, reprograma el siguiente con un nuevo aleatorio. (También por CLI: `npm run cli -- chat proactive <jid> on|off` y `chat proactive-range <jid> <min> <max>`.)
+- **Toma el último contexto**: genera el mensaje a partir de los últimos mensajes del chat (de ambos lados) más tus **notas del dueño** como background, espejando el registro del contacto.
+- **Respeta `draft_mode`** (igual que las respuestas): con `draft_mode = on` crea un **borrador** en la pestaña Borradores; con `off` lo **envía** con la misma cadencia humana (delay 2–8s + "escribiendo").
+- **No inventa**: si no hay un contexto reciente con el que sea natural escribir, **se abstiene** ese ciclo (no manda nada forzado) y lo intenta en el siguiente intervalo.
+- **Anti-acumulación**: en modo borrador no apila un segundo borrador proactivo si ya hay uno pendiente para ese chat.
+- **Respeta los interruptores**: nunca dispara si el agente está apagado (global o por chat), ni en el pseudo-chat de notas (`__owner__`).
+
+Config (env del gateway, opcionales): `PROACTIVE_SCHEDULER` (`on`/`off`, default `on`) y `PROACTIVE_TICK_MS` (cada cuánto revisa el loop, default `30000`). El rango por chat (min–máx min) se configura desde la UI/CLI, no por env (defaults 1–60 en la DB).
+
+> ⚠️ **Cuidado anti-baneo**: enviar mensajes no solicitados de forma recurrente es más arriesgado que solo responder. Usa rangos amplios, actívalo en pocos chats y mantén `draft_mode = on` mientras calibras la calidad.
 
 ## Verificación end-to-end
 
@@ -297,12 +317,13 @@ Si había una pregunta pendiente por falta de contexto y luego agregas una **not
 8. **Abstención**: preguntar algo factual sin contexto (p. ej. "¿a qué hora es la cita del viernes?"). Debe aparecer un borrador **"falta contexto"** (no una respuesta inventada). Un saludo, en cambio, sí se responde normal y corto.
 9. **Auto-respuesta**: con un borrador `needs_info` pendiente, agregar en **Notas** el dato que falta. El agente debe convertirlo en respuesta (borrador o envío según `draft_mode`) sin que el contacto vuelva a preguntar.
 10. **Avisos**: etiquetar un chat como `Owner`; al abstenerse en otro chat, debe llegar el aviso a ese chat por WhatsApp.
+11. **Proactivo**: en la pestaña **Chats**, activar **Proactivo** en un chat con historial y poner rango `1`–`2` min. En 1–2 min (ver pestaña **Actividad** o `docker compose logs -f gateway`): con `draft_mode = on` aparece un **borrador proactivo**; con `off` se **envía** el mensaje. Verificar que reprograma (vuelve a disparar) y que en un chat sin contexto reciente **se abstiene** (no manda nada forzado).
 
 ## Estado v1 vs deferido
 
-**Hecho (v1+)**: WhatsApp conectado; RAG por chat + por etiqueta; templates de tono por categoría; transcripción de audios entrantes; on/off global y por chat; modo borrador; **dashboard web (React) con updates en vivo por SSE**; **notas del dueño por audio/texto que alimentan el RAG**; **inspector de RAG** (stats + explorador de retrieval); **feed de actividad en vivo**; **batch sender desde la UI** (cuenta A → agente B); **UI responsive (móvil/tablet)**; **gateway con Clean Architecture**; **publicado en GitHub**; **abstención anti-alucinación** (no inventa: borradores "falta contexto"); **avisos por WhatsApp** vía etiqueta reservada `Owner`; **auto-respuesta al agregar contexto** (reevalúa pendientes al guardar una nota); **adaptación de registro por chat** + base colombiana + respuestas cortas/humanas; **regla anti-invención de nombres**; **identificación automática de contactos** (nombre desde agenda/pushName, sin pisar lo manual); **edición de nombre y teléfono por chat** en el dashboard; **desplegado en Render free tier** (https://doble.onrender.com — un solo web service, sesión Baileys en DynamoDB, Postgres en Supabase, Basic Auth).
+**Hecho (v1+)**: WhatsApp conectado; RAG por chat + por etiqueta; templates de tono por categoría; transcripción de audios entrantes; on/off global y por chat; modo borrador; **dashboard web (React) con updates en vivo por SSE**; **notas del dueño por audio/texto que alimentan el RAG**; **inspector de RAG** (stats + explorador de retrieval); **feed de actividad en vivo**; **batch sender desde la UI** (cuenta A → agente B); **UI responsive (móvil/tablet)**; **gateway con Clean Architecture**; **publicado en GitHub**; **abstención anti-alucinación** (no inventa: borradores "falta contexto"); **no decide compromisos por el dueño** (planes/citas/préstamos → abstención + aviso); **avisos por WhatsApp** vía etiqueta reservada `Owner`; **auto-respuesta al agregar contexto** (reevalúa pendientes al guardar una nota); **adaptación de registro por chat** + base colombiana + respuestas cortas/humanas; **relevancia por etiqueta (`max_distance`) + few-shot (`examples`) tuneables desde la UI**; **temperatura dinámica** (factual→precisa, social→natural); **prompts de etiqueta con límites por relación**; **regla anti-invención de nombres**; **identificación automática de contactos** (nombre desde agenda/pushName, sin pisar lo manual); **edición de nombre y teléfono por chat** en el dashboard; **auto-revínculo de WhatsApp** (al desvincular purga la sesión y muestra QR nuevo solo) + botón "Revincular"; **mensajes proactivos por chat** (el agente escribe primero, cadencia aleatoria, toma el último contexto, respeta draft_mode y se abstiene); **desplegado en Render free tier** (https://doble.onrender.com — un solo web service, sesión Baileys en DynamoDB, Postgres en Supabase, Basic Auth).
 
-**Diferido a v2+**: TTS / clonación de voz · stickers con visión · resúmenes diarios · notificaciones por Telegram (los avisos por WhatsApp + la revisión de borradores ya cubren la aprobación humana) · scheduler horario · multi-tenancy · Stripe · self-hosting (ollama + whisper.cpp + nomic-embed-text).
+**Diferido a v2+**: TTS / clonación de voz · stickers con visión · resúmenes diarios · notificaciones por Telegram (los avisos por WhatsApp + la revisión de borradores ya cubren la aprobación humana) · scheduler **horario/calendario** (ventanas de envío por hora del día; la cadencia aleatoria por chat ya está hecha) · multi-tenancy · Stripe · self-hosting (ollama + whisper.cpp + nomic-embed-text).
 
 ## Próximos pasos (tareas siguientes)
 

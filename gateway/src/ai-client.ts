@@ -32,6 +32,26 @@ export async function aiRespond(input: {
   };
 }
 
+export async function aiGenerateProactive(input: {
+  chat_id: string;
+}): Promise<RespondResponse> {
+  const res = await fetch(`${config.aiServiceUrl}/generate-proactive`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`AI /generate-proactive failed (${res.status}): ${body}`);
+  }
+  const data = (await res.json()) as Partial<RespondResponse>;
+  return {
+    status: data.status === "need_info" ? "need_info" : "answer",
+    reply: data.reply ?? "",
+    missing: data.missing ?? null,
+  };
+}
+
 export async function aiTranscribe(audioPath: string): Promise<string> {
   const buf = await readFile(audioPath);
   const form = new FormData();

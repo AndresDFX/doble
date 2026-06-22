@@ -1,18 +1,21 @@
 import { pool } from "../db.js";
+import { clampMinutes, nextProactiveAt } from "../domain/proactive-policy.js";
 
 function usage(): never {
   console.error(
     `Usage:
-  agent state                       Show current global state
-  agent enable | disable            Toggle global agent
-  agent draft on | off              Toggle draft mode
-  agent name <user_name>            Set how the agent should refer to you
-  agent chat list [label]           List chats (optionally filter by label)
-  agent chat enable <chat_id>       Enable agent for a single chat
-  agent chat disable <chat_id>      Disable agent for a single chat
-  agent chat label <chat_id> <lbl>  Set/override label for a chat
-  agent drafts [limit]              List pending drafts
-  agent drafts approve <draft_id>   Mark draft as approved (NOTE: does not send; v1 sends manually)
+  agent state                              Show current global state
+  agent enable | disable                   Toggle global agent
+  agent draft on | off                     Toggle draft mode
+  agent name <user_name>                   Set how the agent should refer to you
+  agent chat list [label]                  List chats (optionally filter by label)
+  agent chat enable <chat_id>              Enable agent for a single chat
+  agent chat disable <chat_id>             Disable agent for a single chat
+  agent chat label <chat_id> <lbl>         Set/override label for a chat
+  agent chat proactive <chat_id> on|off    Toggle proactive (scheduled) messages for a chat
+  agent chat proactive-range <chat_id> <min> <max>  Set the random interval (minutes)
+  agent drafts [limit]                     List pending drafts
+  agent drafts approve <draft_id>          Mark draft as approved (NOTE: does not send; v1 sends manually)
 `
   );
   process.exit(2);
@@ -85,6 +88,49 @@ async function main() {
         if (!chatId || !label) usage();
         await pool.query("UPDATE chats SET label = $1 WHERE id = $2", [label, chatId]);
         console.log(`chat ${chatId} label = ${label}`);
+        return;
+      }
+      if (sub === "proactive") {
+        const [chatId, onoff] = args;
+        if (!chatId || (onoff !== "on" && onoff !== "off")) usage();
+        if (onoff === "on") {
+          // Seed the first schedule from the chat's range (defaults if unset) so
+          // the scheduler picks it up — it only fires chats with a next_ts.
+          const { rows } = await pool.query<{
+            proactive_min_minutes: number;
+            proactive_max_minutes: number;
+          }>(
+            "SELECT proactive_min_minutes, proactive_max_minutes FROM chats WHERE id = $1",
+            [chatId]
+          );
+          const min = rows[0]?.proactive_min_minutes ?? 1;
+          const max = rows[0]?.proactive_max_minutes ?? 60;
+          const next = nextProactiveAt(new Date(), min, max);
+          await pool.query(
+            "UPDATE chats SET proactive_enabled = TRUE, proactive_next_ts = $1 WHERE id = $2",
+            [next, chatId]
+          );
+          console.log(`chat ${chatId} proactive = on (próximo ${next.toISOString()})`);
+        } else {
+          await pool.query(
+            "UPDATE chats SET proactive_enabled = FALSE, proactive_next_ts = NULL WHERE id = $1",
+            [chatId]
+          );
+          console.log(`chat ${chatId} proactive = off`);
+        }
+        return;
+      }
+      if (sub === "proactive-range") {
+        const [chatId, minRaw, maxRaw] = args;
+        if (!chatId || minRaw === undefined || maxRaw === undefined) usage();
+        let min = clampMinutes(Number(minRaw));
+        let max = clampMinutes(Number(maxRaw));
+        if (min > max) [min, max] = [max, min];
+        await pool.query(
+          "UPDATE chats SET proactive_min_minutes = $1, proactive_max_minutes = $2 WHERE id = $3",
+          [min, max, chatId]
+        );
+        console.log(`chat ${chatId} proactive range = ${min}-${max} min`);
         return;
       }
       usage();

@@ -2,7 +2,10 @@ import { startBaileys } from "./baileys.js";
 import { aiHealthcheck } from "./ai-client.js";
 import { pool } from "./db.js";
 import { logger } from "./logger.js";
+import { config } from "./config.js";
 import { startApiServer } from "./api/server.js";
+import { container } from "./composition/container.js";
+import { startProactiveScheduler } from "./application/proactive-messenger.js";
 
 async function main() {
   logger.info("Doble gateway starting");
@@ -24,6 +27,12 @@ async function main() {
 
   await startApiServer();
   await startBaileys();
+
+  if (config.proactiveSchedulerEnabled) {
+    startProactiveScheduler(container.proactive, logger, { tickMs: config.proactiveTickMs });
+  } else {
+    logger.info("Proactive scheduler disabled (PROACTIVE_SCHEDULER=off)");
+  }
 }
 
 process.on("SIGINT", async () => {

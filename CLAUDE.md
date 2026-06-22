@@ -21,6 +21,8 @@ El gateway lleva **dos sesiones Baileys** al mismo tiempo:
 
 Event bus en `src/events.ts`, mirrors de estado en `src/wa-status.ts` y `src/sender/status.ts`, y ring buffer de actividad en `src/activity.ts` son los puentes entre los hot paths y la SSE: el use case y los servicios publican; la ruta SSE consume y emite al frontend.
 
+**Mensajes proactivos** (el agente escribe primero): un loop `setInterval` arrancado en `src/index.ts` (`startProactiveScheduler`, cadencia `PROACTIVE_TICK_MS`, default 30s) ejecuta `ProactiveMessenger.tick()` ([src/application/proactive-messenger.ts](gateway/src/application/proactive-messenger.ts)). En cada tick busca chats `proactive_enabled` con `proactive_next_ts <= now` (`chatRepo.listProactiveDue`), pide al AI service `/generate-proactive` (genera desde el ÚLTIMO contexto), entrega **respetando `draft_mode`** (borrador vs `deliverReply`), **se abstiene** si no hay nada con fundamento, y **siempre reprograma** `proactive_next_ts = now + random(min,max)` por chat (intervalo aleatorio, espejo de `delay_aleatorio` de telegram-sender). Reglas puras en [src/domain/proactive-policy.ts](gateway/src/domain/proactive-policy.ts). Es **single-process** (un solo gateway): no hay locks distribuidos; el flag `isRunning` evita ticks solapados. Activación **opt-in por chat** desde la pestaña Chats o CLI (`chat proactive ... on|off`, `chat proactive-range`). El estado de programación (`proactive_*`) vive en la tabla `chats`.
+
 ### Clean Architecture (gateway)
 
 El core del gateway sigue **Clean Architecture**: las dependencias apuntan hacia adentro (`interfaces → application → domain ← infrastructure`). Nada del dominio conoce Fastify, pg ni Baileys.
@@ -105,9 +107,9 @@ Activación de venv en PowerShell: `.\.venv\Scripts\Activate.ps1` (NO `activate`
 
 ## Lo que NO está en v1 (diferido a v2, no proponer sin pedir)
 
-TTS / clonación de voz · stickers con visión · resúmenes diarios · notificaciones Telegram para aprobación humana · scheduler horario · multi-tenancy · Stripe.
+TTS / clonación de voz · stickers con visión · resúmenes diarios · notificaciones Telegram para aprobación humana · scheduler **horario/calendario** (ventanas por hora del día) · multi-tenancy · Stripe.
 
-(Alimentación de RAG por audio del dueño y frontend web YA están implementadas — se adelantaron del v2 original.)
+(Alimentación de RAG por audio del dueño, frontend web y **mensajes proactivos por chat** YA están implementados — se adelantaron del v2 original. Nota: lo proactivo hace cadencia **aleatoria por chat**, NO un scheduler horario/calendario — eso sigue diferido.)
 
 ## Notas del dueño (owner-notes)
 
@@ -122,6 +124,7 @@ Pseudo-chat reservado con `chat_id = '__owner__'` y `label = '__owner__'`, gesti
 ## Archivos por dónde empezar
 
 - Pipeline de respuesta entrante (caso de uso): [gateway/src/application/process-incoming-message.ts](gateway/src/application/process-incoming-message.ts)
+- Mensajes proactivos (scheduler + caso de uso): [gateway/src/application/proactive-messenger.ts](gateway/src/application/proactive-messenger.ts) + reglas puras [gateway/src/domain/proactive-policy.ts](gateway/src/domain/proactive-policy.ts); generación en [ai/app/routers/respond.py](ai/app/routers/respond.py) (`/generate-proactive`) + prompt en [ai/app/prompts/builder.py](ai/app/prompts/builder.py) (`build_proactive_prompt`)
 - Puertos (interfaces del dominio): [gateway/src/domain/ports.ts](gateway/src/domain/ports.ts) · Composition root: [gateway/src/composition/container.ts](gateway/src/composition/container.ts)
 - SQL Postgres (repositorios): [gateway/src/infrastructure/repositories.ts](gateway/src/infrastructure/repositories.ts)
 - Generación con Gemini: [ai/app/routers/respond.py](ai/app/routers/respond.py)

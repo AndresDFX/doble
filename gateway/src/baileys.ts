@@ -19,19 +19,67 @@ import {
   maybeResyncAddressBook,
   queueContactName,
 } from "./infrastructure/contact-sync.js";
-import { setSock } from "./infrastructure/whatsapp-socket.js";
+import { setSock, peekSock } from "./infrastructure/whatsapp-socket.js";
 import { container } from "./composition/container.js";
 import { waStatus } from "./wa-status.js";
 import { bus } from "./events.js";
 import { activity } from "./activity.js";
 
+/**
+ * Bumped on every (re)start. Each socket captures its own value; a socket whose
+ * generation is no longer current ignores its late events so we never end up
+ * with two live sockets (or duplicate reconnect timers) after a relink/reconnect.
+ */
+let connectionGen = 0;
+
+/**
+ * The latest session's `clearAll` (from getAuthState) — wipes the persisted
+ * WhatsApp auth so the next start re-pairs from scratch. Works for BOTH the
+ * file store (local/compose) and the DynamoDB store (Render). Set on each
+ * startBaileys(); used by the logout handler and the manual relink.
+ */
+let clearSession: (() => Promise<void>) | null = null;
+
+/**
+ * Force a re-pair: drop the current socket, wipe the (now useless) session and
+ * boot a fresh one so the admin UI shows a new QR. Triggered manually from
+ * POST /api/wa/relink when the connection is stuck.
+ */
+export async function relinkWhatsApp(): Promise<void> {
+  logger.warn("Manual relink requested");
+  activity.push({ kind: "wa", level: "warn", message: "Revinculación solicitada — generando QR nuevo…" });
+  // Invalidate the live socket so its close event won't fire its own reconnect
+  // and race this restart.
+  connectionGen++;
+  const sock = peekSock();
+  if (sock) {
+    // Best-effort logout (may reject if already unlinked); cap it so a dead
+    // socket can't hang the request, then force-close.
+    await Promise.race([
+      sock.logout().catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
+    ]);
+    try {
+      sock.end(undefined);
+    } catch {
+      /* already closed */
+    }
+  }
+  if (clearSession) {
+    await clearSession().catch((err) => logger.warn({ err }, "relink: clear session failed"));
+  }
+  await startBaileys();
+}
+
 export async function startBaileys(): Promise<void> {
+  const myGen = ++connectionGen;
   await mkdir(config.waMediaDir, { recursive: true });
 
   const { state, saveCreds, clearAll } = await getAuthState({
     sessionDir: config.waSessionDir,
     sessionId: config.waSessionId,
   });
+  clearSession = clearAll;
   const { version } = await fetchLatestBaileysVersion();
   logger.info({ version, authStore: config.waAuthStore }, "Starting Baileys");
 
@@ -47,7 +95,10 @@ export async function startBaileys(): Promise<void> {
   sock.ev.on("creds.update", saveCreds);
   attachContactSync(sock);
 
-  sock.ev.on("connection.update", (update) => {
+  sock.ev.on("connection.update", async (update) => {
+    // A newer startBaileys() (reconnect or manual relink) has superseded this
+    // socket; ignore its trailing events.
+    if (myGen !== connectionGen) return;
     const { connection, lastDisconnect, qr } = update;
     if (qr) {
       logger.info("Scan this QR with WhatsApp -> Linked devices (also shown in the admin UI)");
@@ -74,27 +125,31 @@ export async function startBaileys(): Promise<void> {
     if (connection === "close") {
       const code =
         (lastDisconnect?.error as Boom)?.output?.statusCode ?? 0;
-      const shouldReconnect = code !== DisconnectReason.loggedOut;
-      logger.warn({ code, shouldReconnect }, "WhatsApp connection closed");
+      const loggedOut = code === DisconnectReason.loggedOut;
+      logger.warn({ code, loggedOut }, "WhatsApp connection closed");
       waStatus.setClose(lastDisconnect?.error?.message ?? `code ${code}`);
       bus.publish({ type: "wa-status", payload: waStatus.get() });
       activity.push({
         kind: "wa",
-        level: shouldReconnect ? "warn" : "error",
-        message: `Conexión cerrada (code ${code}). ${shouldReconnect ? "Reintentando…" : "Sesión inválida."}`,
+        level: "warn",
+        message: loggedOut
+          ? `Sesión cerrada (code ${code}). Revinculando: se generará un QR nuevo…`
+          : `Conexión cerrada (code ${code}). Reintentando…`,
         meta: { code, error: lastDisconnect?.error?.message },
       });
-      if (shouldReconnect) {
-        setTimeout(() => {
-          startBaileys().catch((err) =>
-            logger.error({ err }, "Reconnect failed")
-          );
-        }, 2000);
-      } else {
-        // loggedOut: wipe the persisted session so the next start re-pairs from
-        // a clean slate (no manual cleanup needed, incl. the DynamoDB store).
-        clearAll().catch((err) => logger.warn({ err }, "Failed to clear session"));
+      // Logged out (device unlinked / session invalidated): the stored creds are
+      // dead. Clear them — clearAll handles BOTH the file store and the DynamoDB
+      // store — so the restart boots WITHOUT creds and emits a fresh QR. Without
+      // this, Baileys reloads the dead creds, hits 401 again and never shows a QR.
+      // Any other close code keeps the creds and just resumes the session.
+      if (loggedOut) {
+        await clearAll().catch((err) => logger.warn({ err }, "Failed to clear session"));
       }
+      setTimeout(() => {
+        // A manual relink may have already restarted; don't double-start.
+        if (myGen !== connectionGen) return;
+        startBaileys().catch((err) => logger.error({ err }, "Reconnect failed"));
+      }, loggedOut ? 750 : 2000);
     }
   });
 

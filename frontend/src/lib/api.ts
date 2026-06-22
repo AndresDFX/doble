@@ -27,8 +27,21 @@ export type Chat = {
   label: string | null;
   agent_enabled: boolean;
   phone: string | null;
+  proactive_enabled: boolean;
+  proactive_min_minutes: number;
+  proactive_max_minutes: number;
+  proactive_next_ts: string | null;
   msgs: number;
   last_ts: string | null;
+};
+
+export type ChatPatchBody = {
+  label?: string | null;
+  agent_enabled?: boolean;
+  name?: string | null;
+  proactive_enabled?: boolean;
+  proactive_min_minutes?: number;
+  proactive_max_minutes?: number;
 };
 
 export type Message = {
@@ -58,6 +71,8 @@ export type Label = {
   label: string;
   prompt_template: string;
   temperature: number;
+  max_distance: number;
+  examples: string | null;
   chats: number;
 };
 
@@ -187,6 +202,7 @@ export const api = {
   },
   wa: {
     status: () => http<WaStatus>("/api/wa/status"),
+    relink: () => http<{ ok: true }>("/api/wa/relink", { method: "POST" }),
   },
   chats: {
     list: (params: { label?: string; q?: string } = {}) => {
@@ -196,10 +212,7 @@ export const api = {
       return http<Chat[]>(`/api/chats?${search.toString()}`);
     },
     get: (id: string) => http<Chat>(`/api/chats/${encodeURIComponent(id)}`),
-    patch: (
-      id: string,
-      body: { label?: string | null; agent_enabled?: boolean; name?: string | null }
-    ) =>
+    patch: (id: string, body: ChatPatchBody) =>
       http<{ ok: true }>(`/api/chats/${encodeURIComponent(id)}`, {
         method: "PATCH",
         body: JSON.stringify(body),
@@ -224,14 +237,25 @@ export const api = {
   },
   labels: {
     list: () => http<Label[]>("/api/labels"),
-    upsert: (body: { label: string; prompt_template: string; temperature: number }) =>
+    upsert: (body: {
+      label: string;
+      prompt_template: string;
+      temperature: number;
+      max_distance?: number;
+      examples?: string | null;
+    }) =>
       http<{ ok: true }>("/api/labels", {
         method: "POST",
         body: JSON.stringify(body),
       }),
     patch: (
       label: string,
-      body: { prompt_template?: string; temperature?: number }
+      body: {
+        prompt_template?: string;
+        temperature?: number;
+        max_distance?: number;
+        examples?: string | null;
+      }
     ) =>
       http<{ ok: true }>(`/api/labels/${encodeURIComponent(label)}`, {
         method: "PATCH",

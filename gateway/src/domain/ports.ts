@@ -56,6 +56,8 @@ export interface ChatRepository {
   recordContactNames(records: ContactNameRecord[]): Promise<number>;
   /** Count chats that already have a name — drives the address-book resync heuristic. */
   countNamed(): Promise<number>;
+  /** Proactive-enabled chats whose next scheduled send is due at or before `now`. */
+  listProactiveDue(now: Date): Promise<Chat[]>;
 }
 
 export interface MessageRepository {
@@ -106,6 +108,15 @@ export interface AiService {
     chat_id: string;
     message_text: string;
     sender_name: string | null;
+  }): Promise<{ status: "answer" | "need_info"; reply: string; missing: string | null }>;
+  /**
+   * Generate an unprompted, contextual message to RESUME a conversation, from
+   * the chat's most recent context. Same `{status, reply, missing}` contract as
+   * `respond`: `need_info` means "nothing grounded to say now" — the caller then
+   * abstains instead of sending an invented message.
+   */
+  generateProactive(input: {
+    chat_id: string;
   }): Promise<{ status: "answer" | "need_info"; reply: string; missing: string | null }>;
   transcribe(audioPath: string): Promise<string>;
   embedAndStore(input: {

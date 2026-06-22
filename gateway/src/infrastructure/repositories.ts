@@ -82,28 +82,54 @@ export class PostgresAgentStateRepository implements AgentStateRepository {
 
 // --- Chats ------------------------------------------------------------------
 
-type ChatStatsRow = {
+// Columns shared by every chat SELECT — keeps the proactive fields in one place.
+const CHAT_COLS =
+  "c.id, c.name, c.label, c.agent_enabled, c.phone, " +
+  "c.proactive_enabled, c.proactive_min_minutes, c.proactive_max_minutes, c.proactive_next_ts";
+
+type ChatRow = {
   id: string;
   name: string | null;
   label: string | null;
   agent_enabled: boolean;
   phone: string | null;
+  proactive_enabled: boolean;
+  proactive_min_minutes: number;
+  proactive_max_minutes: number;
+  proactive_next_ts: Date | null;
+};
+type ChatStatsRow = ChatRow & {
   msgs: number;
   last_ts: Date | null;
 };
 
+/** Map a DB row to the domain `Chat` (timestamps as ISO strings). */
+const toChat = (r: ChatRow): Chat => ({
+  id: r.id,
+  name: r.name,
+  label: r.label,
+  agent_enabled: r.agent_enabled,
+  phone: r.phone,
+  proactive_enabled: r.proactive_enabled,
+  proactive_min_minutes: r.proactive_min_minutes,
+  proactive_max_minutes: r.proactive_max_minutes,
+  proactive_next_ts: iso(r.proactive_next_ts),
+});
+
 export class PostgresChatRepository implements ChatRepository {
   async get(id: string): Promise<Chat | null> {
-    const { rows } = await pool.query<Chat>(
-      "SELECT id, name, label, agent_enabled, phone FROM chats WHERE id = $1",
+    const { rows } = await pool.query<ChatRow>(
+      `SELECT id, name, label, agent_enabled, phone,
+              proactive_enabled, proactive_min_minutes, proactive_max_minutes, proactive_next_ts
+       FROM chats WHERE id = $1`,
       [id]
     );
-    return rows[0] ?? null;
+    return rows[0] ? toChat(rows[0]) : null;
   }
 
   async getWithStats(id: string): Promise<ChatWithStats | null> {
     const { rows } = await pool.query<ChatStatsRow>(
-      `SELECT c.id, c.name, c.label, c.agent_enabled, c.phone,
+      `SELECT ${CHAT_COLS},
               COALESCE(stats.msgs, 0)::int AS msgs, stats.last_ts
        FROM chats c
        LEFT JOIN (
@@ -114,7 +140,7 @@ export class PostgresChatRepository implements ChatRepository {
       [id]
     );
     const r = rows[0];
-    return r ? { ...r, last_ts: iso(r.last_ts) } : null;
+    return r ? { ...toChat(r), msgs: r.msgs, last_ts: iso(r.last_ts) } : null;
   }
 
   async list(filter: ChatListFilter): Promise<ChatWithStats[]> {
@@ -132,7 +158,7 @@ export class PostgresChatRepository implements ChatRepository {
     }
     values.push(filter.limit ?? 100, filter.offset ?? 0);
     const sql = `
-      SELECT c.id, c.name, c.label, c.agent_enabled, c.phone,
+      SELECT ${CHAT_COLS},
              COALESCE(stats.msgs, 0)::int AS msgs,
              stats.last_ts
       FROM chats c
@@ -145,7 +171,7 @@ export class PostgresChatRepository implements ChatRepository {
       LIMIT $${i++} OFFSET $${i++}
     `;
     const { rows } = await pool.query<ChatStatsRow>(sql, values);
-    return rows.map((r) => ({ ...r, last_ts: iso(r.last_ts) }));
+    return rows.map((r) => ({ ...toChat(r), msgs: r.msgs, last_ts: iso(r.last_ts) }));
   }
 
   async upsert(chat: ChatUpsert): Promise<void> {
@@ -178,6 +204,22 @@ export class PostgresChatRepository implements ChatRepository {
       // when the name is cleared) so contact identification won't overwrite it.
       sets.push(`name_source = $${i++}`);
       values.push(patch.name == null || patch.name === "" ? null : "manual");
+    }
+    if (patch.proactive_enabled !== undefined) {
+      sets.push(`proactive_enabled = $${i++}`);
+      values.push(patch.proactive_enabled);
+    }
+    if (patch.proactive_min_minutes !== undefined) {
+      sets.push(`proactive_min_minutes = $${i++}`);
+      values.push(patch.proactive_min_minutes);
+    }
+    if (patch.proactive_max_minutes !== undefined) {
+      sets.push(`proactive_max_minutes = $${i++}`);
+      values.push(patch.proactive_max_minutes);
+    }
+    if (patch.proactive_next_ts !== undefined) {
+      sets.push(`proactive_next_ts = $${i++}`);
+      values.push(patch.proactive_next_ts);
     }
     if (sets.length === 0) return;
     values.push(id);
@@ -239,6 +281,21 @@ export class PostgresChatRepository implements ChatRepository {
        ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label`,
       [OWNER_CHAT_ID, OWNER_LABEL]
     );
+  }
+
+  async listProactiveDue(now: Date): Promise<Chat[]> {
+    const { rows } = await pool.query<ChatRow>(
+      `SELECT id, name, label, agent_enabled, phone,
+              proactive_enabled, proactive_min_minutes, proactive_max_minutes, proactive_next_ts
+       FROM chats
+       WHERE proactive_enabled = TRUE
+         AND proactive_next_ts IS NOT NULL
+         AND proactive_next_ts <= $1
+         AND id <> $2
+       ORDER BY proactive_next_ts ASC`,
+      [now, OWNER_CHAT_ID]
+    );
+    return rows.map(toChat);
   }
 }
 
@@ -384,7 +441,7 @@ export class PostgresDraftRepository implements DraftRepository {
 export class PostgresLabelRepository implements LabelRepository {
   async list(): Promise<LabelWithStats[]> {
     const { rows } = await pool.query<LabelWithStats>(
-      `SELECT lc.label, lc.prompt_template, lc.temperature,
+      `SELECT lc.label, lc.prompt_template, lc.temperature, lc.max_distance, lc.examples,
               COALESCE(stats.chats, 0)::int AS chats
        FROM labels_config lc
        LEFT JOIN (
@@ -397,12 +454,20 @@ export class PostgresLabelRepository implements LabelRepository {
 
   async upsert(label: Label): Promise<void> {
     await pool.query(
-      `INSERT INTO labels_config (label, prompt_template, temperature)
-       VALUES ($1, $2, $3)
+      `INSERT INTO labels_config (label, prompt_template, temperature, max_distance, examples)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (label) DO UPDATE SET
          prompt_template = EXCLUDED.prompt_template,
-         temperature = EXCLUDED.temperature`,
-      [label.label, label.prompt_template, label.temperature ?? 0.7]
+         temperature = EXCLUDED.temperature,
+         max_distance = EXCLUDED.max_distance,
+         examples = EXCLUDED.examples`,
+      [
+        label.label,
+        label.prompt_template,
+        label.temperature ?? 0.7,
+        label.max_distance ?? 1.3,
+        label.examples ?? null,
+      ]
     );
   }
 
@@ -417,6 +482,14 @@ export class PostgresLabelRepository implements LabelRepository {
     if (patch.temperature !== undefined) {
       sets.push(`temperature = $${i++}`);
       values.push(patch.temperature);
+    }
+    if (patch.max_distance !== undefined) {
+      sets.push(`max_distance = $${i++}`);
+      values.push(patch.max_distance);
+    }
+    if (patch.examples !== undefined) {
+      sets.push(`examples = $${i++}`);
+      values.push(patch.examples);
     }
     if (sets.length === 0) return;
     values.push(label);

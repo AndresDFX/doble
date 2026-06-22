@@ -1,7 +1,24 @@
 import type { FastifyInstance } from "fastify";
 import { container } from "../../composition/container.js";
+import {
+  MIN_INTERVAL_MINUTES,
+  MAX_INTERVAL_MINUTES,
+} from "../../domain/proactive-policy.js";
 
-type ChatPatch = { label?: string | null; agent_enabled?: boolean; name?: string | null };
+type ChatPatch = {
+  label?: string | null;
+  agent_enabled?: boolean;
+  name?: string | null;
+  proactive_enabled?: boolean;
+  proactive_min_minutes?: number;
+  proactive_max_minutes?: number;
+};
+
+const isIntInRange = (n: unknown): n is number =>
+  typeof n === "number" &&
+  Number.isInteger(n) &&
+  n >= MIN_INTERVAL_MINUTES &&
+  n <= MAX_INTERVAL_MINUTES;
 
 export async function registerChatRoutes(app: FastifyInstance): Promise<void> {
   app.get<{
@@ -28,8 +45,22 @@ export async function registerChatRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string }; Body: ChatPatch }>(
     "/api/chats/:id",
     async (req, reply) => {
-      const { label, agent_enabled, name } = req.body ?? {};
-      if (label === undefined && agent_enabled === undefined && name === undefined) {
+      const {
+        label,
+        agent_enabled,
+        name,
+        proactive_enabled,
+        proactive_min_minutes,
+        proactive_max_minutes,
+      } = req.body ?? {};
+      if (
+        label === undefined &&
+        agent_enabled === undefined &&
+        name === undefined &&
+        proactive_enabled === undefined &&
+        proactive_min_minutes === undefined &&
+        proactive_max_minutes === undefined
+      ) {
         reply.status(400);
         return { error: "no fields to update" };
       }
@@ -43,7 +74,35 @@ export async function registerChatRoutes(app: FastifyInstance): Promise<void> {
         }
         normalizedName = trimmed === "" ? null : trimmed;
       }
-      await container.chats.patch(req.params.id, { label, agent_enabled, name: normalizedName });
+      // Validate the proactive interval range (minutes, whole, within bounds).
+      if (proactive_min_minutes !== undefined && !isIntInRange(proactive_min_minutes)) {
+        reply.status(400);
+        return {
+          error: `proactive_min_minutes must be an integer in [${MIN_INTERVAL_MINUTES}, ${MAX_INTERVAL_MINUTES}]`,
+        };
+      }
+      if (proactive_max_minutes !== undefined && !isIntInRange(proactive_max_minutes)) {
+        reply.status(400);
+        return {
+          error: `proactive_max_minutes must be an integer in [${MIN_INTERVAL_MINUTES}, ${MAX_INTERVAL_MINUTES}]`,
+        };
+      }
+      if (
+        proactive_min_minutes !== undefined &&
+        proactive_max_minutes !== undefined &&
+        proactive_min_minutes > proactive_max_minutes
+      ) {
+        reply.status(400);
+        return { error: "proactive_min_minutes cannot exceed proactive_max_minutes" };
+      }
+      await container.chats.patch(req.params.id, {
+        label,
+        agent_enabled,
+        name: normalizedName,
+        proactive_enabled,
+        proactive_min_minutes,
+        proactive_max_minutes,
+      });
       return { ok: true };
     }
   );

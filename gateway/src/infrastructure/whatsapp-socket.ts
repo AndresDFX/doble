@@ -15,3 +15,8 @@ export function getSock(): WASocket {
   if (!currentSock) throw new Error("WhatsApp socket not initialized yet");
   return currentSock;
 }
+
+/** Like getSock but returns null instead of throwing when not yet connected. */
+export function peekSock(): WASocket | null {
+  return currentSock;
+}

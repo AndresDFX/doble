@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type Chat, type Message } from "../lib/api";
+import { api, type Chat, type ChatPatchBody, type Message } from "../lib/api";
 import {
   Badge,
   Button,
@@ -34,10 +34,8 @@ export function Chats() {
   );
 
   const patchChat = useMutation({
-    mutationFn: (input: {
-      id: string;
-      body: { label?: string | null; agent_enabled?: boolean; name?: string | null };
-    }) => api.chats.patch(input.id, input.body),
+    mutationFn: (input: { id: string; body: ChatPatchBody }) =>
+      api.chats.patch(input.id, input.body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["chats"] });
       toast.success("Chat actualizado");
@@ -107,7 +105,7 @@ function ChatRow({
   labels: string[];
   selected: boolean;
   onSelect: () => void;
-  onPatch: (body: { label?: string | null; agent_enabled?: boolean; name?: string | null }) => void;
+  onPatch: (body: ChatPatchBody) => void;
 }) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(chat.name ?? "");
@@ -202,8 +200,101 @@ function ChatRow({
         <span className="shrink-0 text-xs text-zinc-500 tabular-nums">
           {chat.msgs.toLocaleString()} msgs
         </span>
-        <Switch checked={chat.agent_enabled} onChange={(v) => onPatch({ agent_enabled: v })} />
+        <div className="flex items-center gap-1.5" title="Agente activo en este chat">
+          <span className="text-[10px] uppercase tracking-wide text-zinc-500">Agente</span>
+          <Switch checked={chat.agent_enabled} onChange={(v) => onPatch({ agent_enabled: v })} />
+        </div>
+        <ProactiveControls chat={chat} onPatch={onPatch} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Per-chat proactive messaging: a switch to opt this chat in, plus the random
+ * interval range (minutes) shown only when on. Saves the range on blur/Enter,
+ * clamping and ordering min/max locally for instant feedback.
+ */
+function ProactiveControls({
+  chat,
+  onPatch,
+}: {
+  chat: Chat;
+  onPatch: (body: ChatPatchBody) => void;
+}) {
+  const [min, setMin] = useState(String(chat.proactive_min_minutes));
+  const [max, setMax] = useState(String(chat.proactive_max_minutes));
+
+  // Re-sync local inputs if the server value changes (e.g. clamped on save).
+  useEffect(() => setMin(String(chat.proactive_min_minutes)), [chat.proactive_min_minutes]);
+  useEffect(() => setMax(String(chat.proactive_max_minutes)), [chat.proactive_max_minutes]);
+
+  const clamp = (v: string, fallback: number) =>
+    Math.max(1, Math.min(1440, Math.round(Number(v) || fallback)));
+
+  const saveRange = () => {
+    const lo = clamp(min, 1);
+    const hi = clamp(max, 60);
+    const orderedLo = Math.min(lo, hi);
+    const orderedHi = Math.max(lo, hi);
+    setMin(String(orderedLo));
+    setMax(String(orderedHi));
+    if (
+      orderedLo !== chat.proactive_min_minutes ||
+      orderedHi !== chat.proactive_max_minutes
+    ) {
+      onPatch({ proactive_min_minutes: orderedLo, proactive_max_minutes: orderedHi });
+    }
+  };
+
+  const nextHint =
+    chat.proactive_enabled && chat.proactive_next_ts
+      ? `próx. ${new Date(chat.proactive_next_ts).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}`
+      : null;
+
+  return (
+    <div
+      className="flex items-center gap-1.5"
+      onClick={(e) => e.stopPropagation()}
+      title="Mensajes proactivos: el agente escribe solo cada cierto tiempo aleatorio"
+    >
+      <span className="text-[10px] uppercase tracking-wide text-zinc-500">Proactivo</span>
+      <Switch
+        checked={chat.proactive_enabled}
+        onChange={(v) => onPatch({ proactive_enabled: v })}
+      />
+      {chat.proactive_enabled && (
+        <div className="flex items-center gap-1 text-[10px] text-zinc-500">
+          <Input
+            type="number"
+            min={1}
+            max={1440}
+            value={min}
+            onChange={(e) => setMin(e.target.value)}
+            onBlur={saveRange}
+            onKeyDown={(e) => e.key === "Enter" && saveRange()}
+            className="h-7 w-12 px-1.5 text-center text-xs"
+            title="mínimo (min)"
+          />
+          <span>–</span>
+          <Input
+            type="number"
+            min={1}
+            max={1440}
+            value={max}
+            onChange={(e) => setMax(e.target.value)}
+            onBlur={saveRange}
+            onKeyDown={(e) => e.key === "Enter" && saveRange()}
+            className="h-7 w-12 px-1.5 text-center text-xs"
+            title="máximo (min)"
+          />
+          <span>min</span>
+          {nextHint && <span className="ml-1 text-zinc-600">· {nextHint}</span>}
+        </div>
+      )}
     </div>
   );
 }
