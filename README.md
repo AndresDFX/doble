@@ -41,6 +41,18 @@ El emparejamiento de WhatsApp se hace **desde el dashboard**: la pestaña "Dashb
 > docker compose down -v             # bajar y borrar sesión WA + DB
 > ```
 
+## Desplegar en la nube (Render free tier)
+
+Doble puede correr en **Render** manteniéndose en free tier, con el mismo patrón que el proyecto hermano `telegram-sender`: el gateway corre **always-on** y su **sesión de WhatsApp vive en DynamoDB** (no en disco), así el disco efímero de Render deja de importar y no hay que re-escanear el QR en cada reinicio. El gateway sirve el dashboard en el mismo origen, detrás de **Basic Auth**.
+
+- Blueprint listo: [`render.yaml`](render.yaml) + [`Dockerfile.render`](Dockerfile.render).
+- Postgres+pgvector va en **Neon/Supabase** (free, perpetuo), no en Render.
+- Sesión en DynamoDB vía `WA_AUTH_STORE=dynamo` (ver [auth-state](gateway/src/infrastructure/auth-state.ts)).
+
+**Guía paso a paso:** [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md) — tabla DynamoDB + IAM, base Neon, deploy del Blueprint, **vinculación desde IP residencial** (Render bloquea el linking desde datacenter) y keep-alive para el sleep de Render Free.
+
+> ¿Always-on de verdad y perpetuo? Una VM **Oracle Cloud Always Free** corre el `docker compose` completo sin el sleep de 15 min de Render. Render es el camino "igual que el otro proyecto"; Oracle es el más robusto para un agente *inbound*.
+
 ## Setup local (sin Docker, dev/debug)
 
 ### 1. Requisitos

@@ -21,11 +21,32 @@ function resolveDir(envValue: string | undefined, fallback: string): string {
   return isAbsolute(raw) ? raw : resolve(GATEWAY_DIR, raw);
 }
 
+type AuthStore = "files" | "dynamo";
+
 export const config = {
   databaseUrl: required("DATABASE_URL"),
   aiServiceUrl: process.env.AI_SERVICE_URL ?? "http://localhost:8000",
-  gatewayPort: Number(process.env.GATEWAY_PORT ?? 3000),
+  // PORT is what Render (and most PaaS) inject; GATEWAY_PORT wins locally.
+  gatewayPort: Number(process.env.GATEWAY_PORT ?? process.env.PORT ?? 3000),
   // Resolved relative to gateway/, regardless of cwd
   waSessionDir: resolveDir(process.env.WA_SESSION_DIR, ".wa-session"),
   waMediaDir: resolveDir(process.env.WA_MEDIA_DIR, ".wa-media"),
+
+  // Where the Baileys session lives: "files" (local disk, default) or "dynamo"
+  // (DynamoDB) for ephemeral-disk hosts like Render. See infrastructure/auth-state.ts.
+  waAuthStore: (process.env.WA_AUTH_STORE === "dynamo" ? "dynamo" : "files") as AuthStore,
+  waSessionId: process.env.WA_SESSION_ID ?? "default",
+  dynamoAuthTable: process.env.WA_AUTH_TABLE ?? "",
+  awsRegion: process.env.AWS_REGION ?? "us-east-1",
+
+  // Optional Basic Auth gate for the admin API + dashboard. Enabled only when
+  // ADMIN_PASSWORD is set (so local dev stays open). Required when the gateway
+  // is exposed on a public URL (Render) — the dashboard has no login of its own.
+  adminUser: process.env.ADMIN_USER ?? "admin",
+  adminPassword: process.env.ADMIN_PASSWORD ?? "",
+
+  // When set, the gateway also serves the built frontend (SPA) from this dir,
+  // same-origin as /api. Used on Render so one service + one Basic Auth prompt
+  // covers both. Unset in docker-compose (nginx serves the frontend there).
+  frontendDist: process.env.FRONTEND_DIST ?? "",
 };

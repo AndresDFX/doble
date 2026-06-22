@@ -17,6 +17,7 @@ import uvicorn
 
 if __name__ == "__main__":
     host = os.environ.get("AI_SERVICE_HOST", "127.0.0.1")
-    port = int(os.environ.get("AI_SERVICE_PORT", "8000"))
+    # PORT is what Render (and most PaaS) inject; AI_SERVICE_PORT wins locally.
+    port = int(os.environ.get("AI_SERVICE_PORT") or os.environ.get("PORT") or "8000")
     reload = "--no-reload" not in sys.argv
     uvicorn.run("app.main:app", host=host, port=port, reload=reload)

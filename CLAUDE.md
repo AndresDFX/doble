@@ -33,7 +33,7 @@ El core del gateway sigue **Clean Architecture**: las dependencias apuntan hacia
   - `process-incoming-message.ts` (el pipeline entrante, antes `handlers/incoming.ts`).
   - `reply-delivery.ts` (enviar+persistir+publicar+embeber, compartido por pipeline y "enviar draft").
   - `services.ts` (un servicio por recurso HTTP: AgentState, Chat, Draft, Label, OwnerNote, Rag, Health).
-- `src/infrastructure/` — adapters que **implementan** los puertos: `repositories.ts` (todo el SQL Postgres), `ai-service.ts` (HTTP al AI service), `whatsapp-gateway.ts` (cadencia humana + envío), `whatsapp-socket.ts` (holder del socket), `adapters.ts` (bus/activity/logger/clock). `src/db.ts` solo expone el `pool`.
+- `src/infrastructure/` — adapters que **implementan** los puertos: `repositories.ts` (todo el SQL Postgres), `ai-service.ts` (HTTP al AI service), `whatsapp-gateway.ts` (cadencia humana + envío), `whatsapp-socket.ts` (holder del socket), `adapters.ts` (bus/activity/logger/clock), `auth-state.ts` + `dynamo-auth.ts` (dónde vive la sesión Baileys: disco o DynamoDB, según `WA_AUTH_STORE`). `src/db.ts` solo expone el `pool`.
 - `src/composition/container.ts` — **composition root**: el único lugar que instancia clases concretas y las inyecta en los casos de uso. Singleton.
 - `src/api/routes/*` — **controllers** delgados: validan HTTP y llaman `container.<servicio>`. No hay SQL en las rutas.
 
@@ -133,3 +133,6 @@ Pseudo-chat reservado con `chat_id = '__owner__'` y `label = '__owner__'`, gesti
 - Owner notes: [ai/app/rag/owner.py](ai/app/rag/owner.py) (constantes), [gateway/src/owner.ts](gateway/src/owner.ts) + [gateway/src/api/routes/owner-notes.ts](gateway/src/api/routes/owner-notes.ts), [frontend/src/views/Notes.tsx](frontend/src/views/Notes.tsx) + [frontend/src/lib/useRecorder.ts](frontend/src/lib/useRecorder.ts)
 - Compose stack: [docker-compose.yml](docker-compose.yml)
 - Dockerfiles: [gateway/Dockerfile](gateway/Dockerfile), [ai/Dockerfile](ai/Dockerfile), [frontend/Dockerfile](frontend/Dockerfile) + [frontend/nginx.conf](frontend/nginx.conf)
+- Sesión Baileys (disco vs DynamoDB): [gateway/src/infrastructure/auth-state.ts](gateway/src/infrastructure/auth-state.ts) + [dynamo-auth.ts](gateway/src/infrastructure/dynamo-auth.ts)
+- Basic Auth + serving del SPA (Render): [gateway/src/api/hosting.ts](gateway/src/api/hosting.ts)
+- Despliegue en Render (free tier): [render.yaml](render.yaml) + [Dockerfile.render](Dockerfile.render) + [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md)

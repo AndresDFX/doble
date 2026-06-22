@@ -1,7 +1,6 @@
 import {
   default as makeWASocket,
   DisconnectReason,
-  useMultiFileAuthState,
   fetchLatestBaileysVersion,
   downloadMediaMessage,
   type WASocket,
@@ -14,6 +13,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
+import { getAuthState } from "./infrastructure/auth-state.js";
 import { setSock } from "./infrastructure/whatsapp-socket.js";
 import { container } from "./composition/container.js";
 import { waStatus } from "./wa-status.js";
@@ -21,12 +21,14 @@ import { bus } from "./events.js";
 import { activity } from "./activity.js";
 
 export async function startBaileys(): Promise<void> {
-  await mkdir(config.waSessionDir, { recursive: true });
   await mkdir(config.waMediaDir, { recursive: true });
 
-  const { state, saveCreds } = await useMultiFileAuthState(config.waSessionDir);
+  const { state, saveCreds, clearAll } = await getAuthState({
+    sessionDir: config.waSessionDir,
+    sessionId: config.waSessionId,
+  });
   const { version } = await fetchLatestBaileysVersion();
-  logger.info({ version }, "Starting Baileys");
+  logger.info({ version, authStore: config.waAuthStore }, "Starting Baileys");
 
   const sock = makeWASocket({
     version,
@@ -80,6 +82,10 @@ export async function startBaileys(): Promise<void> {
             logger.error({ err }, "Reconnect failed")
           );
         }, 2000);
+      } else {
+        // loggedOut: wipe the persisted session so the next start re-pairs from
+        // a clean slate (no manual cleanup needed, incl. the DynamoDB store).
+        clearAll().catch((err) => logger.warn({ err }, "Failed to clear session"));
       }
     }
   });

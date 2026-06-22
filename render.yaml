@@ -1,0 +1,63 @@
+# Render Blueprint for Doble — mirrors the telegram-sender approach:
+# the always-on Baileys service runs here with its session in DynamoDB (so
+# Render's ephemeral disk is a non-issue), behind Basic Auth.
+#
+# Postgres+pgvector is NOT on Render (free PG expires) — point DATABASE_URL at
+# Neon or Supabase (both free, both ship pgvector). See docs/DEPLOY-RENDER.md.
+#
+# Secrets (sync:false) are left blank on purpose — set them in the Render
+# dashboard after the first deploy. Never commit real keys.
+
+services:
+  # Gateway: Baileys (always-on) + admin API + the dashboard, one origin.
+  - type: web
+    name: doble-gateway
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL # Neon/Supabase Postgres (with pgvector), sslmode=require
+        sync: false
+      - key: AI_SERVICE_URL # paste the doble-ai service URL after it deploys
+        sync: false
+      - key: WA_AUTH_STORE
+        value: dynamo
+      - key: WA_AUTH_TABLE
+        value: doble-whatsapp-auth
+      - key: WA_SESSION_ID
+        value: default
+      - key: AWS_REGION
+        value: us-east-1
+      - key: AWS_ACCESS_KEY_ID # IAM user limited to the auth table
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: ADMIN_USER
+        value: admin
+      - key: ADMIN_PASSWORD # gates the public dashboard — REQUIRED here
+        sync: false
+
+  # AI service: RAG + Gemini. Request-driven; free tier sleep adds first-call
+  # latency but is otherwise fine (the gateway calls it synchronously).
+  - type: web
+    name: doble-ai
+    runtime: docker
+    plan: free
+    dockerfilePath: ./ai/Dockerfile
+    dockerContext: ./ai
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL # same Neon/Supabase URL as the gateway
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_CHAT_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_EMBED_MODEL
+        value: gemini-embedding-001
+      - key: GEMINI_EMBED_DIM
+        value: "1536"
+      - key: AI_SERVICE_HOST
+        value: 0.0.0.0

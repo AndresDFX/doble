@@ -14,11 +14,13 @@ import { registerActivityRoute } from "./routes/activity.js";
 import { registerSenderRoutes } from "./routes/sender.js";
 import { registerRagRoutes } from "./routes/rag.js";
 import { registerOwnerNotesRoutes } from "./routes/owner-notes.js";
+import { registerBasicAuth, registerFrontend } from "./hosting.js";
 
 export async function startApiServer(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
 
   await app.register(cors, { origin: true, credentials: true });
+  registerBasicAuth(app);
   await app.register(multipart, {
     limits: { fileSize: 25 * 1024 * 1024 },
   });
@@ -34,6 +36,10 @@ export async function startApiServer(): Promise<FastifyInstance> {
   await registerRagRoutes(app);
   await registerOwnerNotesRoutes(app);
   await registerEventsRoute(app);
+
+  // Optionally serve the built SPA same-origin (Render single service). Must be
+  // last so the SPA fallback never shadows the /api routes registered above.
+  await registerFrontend(app);
 
   app.setErrorHandler((err, req, reply) => {
     logger.error({ err, url: req.url, method: req.method }, "API error");
