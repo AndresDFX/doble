@@ -11,6 +11,7 @@
     "start": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
     "ingest-history": "tsx src/scripts/init-history.ts",
+    "link": "tsx src/scripts/link.ts",
     "batch-send": "tsx src/scripts/batch-send.ts",
     "cli": "tsx src/scripts/cli.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

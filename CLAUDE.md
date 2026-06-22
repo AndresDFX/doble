@@ -66,6 +66,13 @@ cd frontend ; npm run dev          # frontend en :5173 con HMR
 # Bootstrap RAG (one-shot, NO al mismo tiempo que el gateway)
 cd gateway ; npm run ingest-history
 
+# Vincular WhatsApp para el deploy en Render: abre Baileys y persiste la sesión
+# en el store de WA_AUTH_STORE (DynamoDB) sin necesitar Postgres ni el AI.
+# Carga .env + .env.aws. Vincula LOCAL (IP residencial) y Render reusa la sesión.
+cd gateway ; npm run link                          # QR
+cd gateway ; npm run link -- --pair 573XXXXXXXXX   # código de 8 dígitos
+cd gateway ; npm run link -- --reset               # borrar sesión y reintentar
+
 # Batch-send: dispara mensajes en lote DESDE WhatsApp A hacia el secundario
 # usando una segunda sesión Baileys aislada en .wa-sender-session/.
 # Útil para matrices de prueba multi-tema. Catálogo en gateway/sender/messages.json.
@@ -136,4 +143,5 @@ Pseudo-chat reservado con `chat_id = '__owner__'` y `label = '__owner__'`, gesti
 - Sesión Baileys (disco vs DynamoDB): [gateway/src/infrastructure/auth-state.ts](gateway/src/infrastructure/auth-state.ts) + [dynamo-auth.ts](gateway/src/infrastructure/dynamo-auth.ts)
 - Identificación de contactos (nombre desde agenda/pushName, precedencia manual>contact>push): [gateway/src/infrastructure/contact-sync.ts](gateway/src/infrastructure/contact-sync.ts) → `chats.name` + columna `name_source`. Solo nombra conversaciones existentes (no inserta la agenda entera).
 - Basic Auth + serving del SPA (Render): [gateway/src/api/hosting.ts](gateway/src/api/hosting.ts)
-- Despliegue en Render (free tier): [render.yaml](render.yaml) + [Dockerfile.render](Dockerfile.render) + [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md)
+- Despliegue en Render (free tier, un solo web service): [render.yaml](render.yaml) + [Dockerfile.render](Dockerfile.render) + [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md)
+- Vinculación local de WhatsApp para Render (`npm run link`): [gateway/src/scripts/link.ts](gateway/src/scripts/link.ts)

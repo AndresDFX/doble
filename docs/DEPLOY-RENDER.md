@@ -91,10 +91,15 @@ el Blueprint y la imagen. **No hay segundo servicio ni `AI_SERVICE_URL` que pega
 
 Igual que en `telegram-sender`: WhatsApp suele rechazar el linking (*"inténtalo más
 tarde"*) cuando el socket sale de una **IP de datacenter**. Lo fiable es **vincular
-localmente una vez** apuntando a la **misma** tabla DynamoDB; la sesión queda ahí y
+localmente una vez** contra la **misma** tabla DynamoDB; la sesión queda ahí y
 **Render la reutiliza** (reconectar una sesión existente no tiene ese bloqueo).
 
-En tu `.env` local, apunta al store remoto:
+Para esto hay un script dedicado: **`npm run link`**. Solo abre el socket de Baileys
+y guarda las credenciales — **no necesita Postgres ni el servicio AI**. Carga `.env`
+y `.env.aws` automáticamente, así que tus credenciales AWS pueden vivir en `.env.aws`.
+
+**1) Apunta al store de DynamoDB.** En `.env` (o `.env.aws`) — `DATABASE_URL` NO hace
+falta para vincular:
 
 ```bash
 WA_AUTH_STORE=dynamo
@@ -102,21 +107,29 @@ WA_AUTH_TABLE=doble-whatsapp-auth
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
-DATABASE_URL=postgresql://...neon.tech/...?sslmode=require
 ```
 
-Levanta solo el gateway y escanea el QR (desde la terminal o `localhost:3000`):
+**2) Vincula** (desde `gateway/`, en tu red residencial):
 
 ```powershell
-cd gateway ; npm run dev
+cd gateway
+npm run link                          # modo QR (escanéalo desde el teléfono)
+npm run link -- --pair 573001234567   # alternativa: código de 8 dígitos
+npm run link -- --reset               # si quedó en mal estado: borra y reintenta
 ```
 
-Cuando diga "WhatsApp connection open", para el proceso (Ctrl-C). La sesión ya está
-en DynamoDB → el gateway de Render la toma en su próximo arranque/deploy sin QR.
+El script imprime contra qué store va a vincular (confírmalo: debe decir
+**DynamoDB** con tu tabla). Cuando muestre **`✅ CONECTADO`**, la sesión ya quedó en
+DynamoDB; cierra con **Ctrl-C**. El servicio de Render la tomará en su próximo
+arranque/deploy **sin QR**.
 
-> **Un solo host activo a la vez.** No dejes el gateway local y el de Render
+> **Un solo host activo a la vez.** No dejes el link local y el servicio de Render
 > conectados con la misma sesión al tiempo: WhatsApp solo admite un socket por
-> credencial y se patean (error 440). Vincula local, apaga local, deja Render.
+> credencial y se patean (error 440). Vincula local, ciérralo, deja Render.
+>
+> Si `--pair`/QR falla repetidamente, WhatsApp bloquea ~30–60 min: espera y
+> reintenta **una** vez. Ten el teléfono con WhatsApp actualizado y ≤4 dispositivos
+> vinculados.
 
 ## 5. Keep-alive (el sleep de Render Free)
 

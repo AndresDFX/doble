@@ -49,7 +49,7 @@ Doble puede correr en **Render** manteniéndose en free tier, con el mismo patr�
 - Postgres+pgvector va en **Neon/Supabase** (free, perpetuo), no en Render.
 - Sesión en DynamoDB vía `WA_AUTH_STORE=dynamo` (ver [auth-state](gateway/src/infrastructure/auth-state.ts)).
 
-**Guía paso a paso:** [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md) — tabla DynamoDB + IAM, base Neon, deploy del Blueprint, **vinculación desde IP residencial** (Render bloquea el linking desde datacenter) y keep-alive para el sleep de Render Free.
+**Guía paso a paso:** [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md) — tabla DynamoDB + IAM, base Neon, deploy de **un solo web service**, **vinculación desde IP residencial** con `npm run link` (Render bloquea el linking desde datacenter) y keep-alive para el sleep de Render Free.
 
 > ¿Always-on de verdad y perpetuo? Una VM **Oracle Cloud Always Free** corre el `docker compose` completo sin el sleep de 15 min de Render. Render es el camino "igual que el otro proyecto"; Oracle es el más robusto para un agente *inbound*.
 
