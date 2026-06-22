@@ -56,12 +56,36 @@ región/cuenta en el ARN):
 Guarda su `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. La tabla cabe de sobra en
 el free tier perpetuo de DynamoDB (25 GB, items diminutos).
 
-## 2. Postgres + pgvector (Neon o Supabase)
+## 2. Postgres + pgvector (Supabase o Neon)
 
-1. Crea una base gratis en [neon.tech](https://neon.tech) (o supabase.com).
-2. Aplica el schema: corre [`db/init.sql`](../db/init.sql) contra ella (incluye
-   `CREATE EXTENSION vector` y las tablas). En Neon: SQL Editor → pega el archivo.
-3. Copia el connection string (con `?sslmode=require`). Ese es tu `DATABASE_URL`.
+### Supabase (recomendado, agent-friendly)
+
+Al **crear el proyecto**: nombre `doble`, password fuerte (guárdalo), región US (la
+misma que elijas para Render). En *Security* puedes **desactivar Data API,
+auto-expose y automatic RLS** — Doble se conecta directo a Postgres, no usa la API
+REST. **No** conectes el repo de GitHub: el schema es un solo `db/init.sql`, no un
+flujo de migraciones (lo aplicas en un paso abajo).
+
+1. **Habilita pgvector:** Dashboard → *Database → Extensions* → activa **`vector`**
+   (o deja que el paso 2 lo cree).
+2. **Aplica el schema:** *SQL Editor* → pega [`db/init.sql`](../db/init.sql) → Run.
+   Incluye `CREATE EXTENSION vector`, las tablas y `name_source`. Si diera *"type
+   vector does not exist"*, habilita la extensión (paso 1) y reintenta.
+3. **Copia el connection string** del **Session Pooler** (botón *Connect* →
+   *Session pooler*): `postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`.
+   Añade `?sslmode=require`. Ese es tu `DATABASE_URL`.
+
+> ⚠️ Usa el **Session pooler (puerto 5432)**, no el *Transaction pooler* (6543):
+> el pooler de sesión es IPv4 (Render lo necesita) y soporta *prepared statements*
+> (psycopg los usa). El *direct* `db.<ref>.supabase.co` es IPv6-only en free tier.
+
+### Neon (alternativa)
+
+Crea la base, pega `db/init.sql` en el SQL Editor, copia el string con
+`?sslmode=require`. Ese es tu `DATABASE_URL`.
+
+> El gateway activa TLS automáticamente cuando el string trae `sslmode`
+> (ver [`gateway/src/db.ts`](../gateway/src/db.ts)); en local sin `sslmode` no usa SSL.
 
 ## 3. Deploy — un solo web service
 
