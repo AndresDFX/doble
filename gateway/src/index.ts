@@ -6,6 +6,7 @@ import { config } from "./config.js";
 import { startApiServer } from "./api/server.js";
 import { container } from "./composition/container.js";
 import { startProactiveScheduler } from "./application/proactive-messenger.js";
+import { applySchema } from "./infrastructure/migrate.js";
 
 async function main() {
   logger.info("Doble gateway starting");
@@ -14,8 +15,13 @@ async function main() {
     await pool.query("SELECT 1");
     logger.info("Postgres connection OK");
   } catch (err) {
-    logger.fatal({ err }, "Cannot connect to Postgres — is docker compose up?");
+    logger.fatal({ err }, "Cannot connect to Postgres — check DATABASE_URL");
     process.exit(1);
+  }
+
+  // Self-heal the schema (idempotent) before anything queries it.
+  if (config.autoMigrate) {
+    await applySchema();
   }
 
   const aiOk = await aiHealthcheck();

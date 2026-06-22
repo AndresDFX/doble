@@ -48,6 +48,8 @@ COPY ai/run.py /app/ai/run.py
 COPY --from=gateway-deps /app/gateway/node_modules /app/gateway/node_modules
 COPY gateway/package.json gateway/tsconfig.json /app/gateway/
 COPY gateway/src /app/gateway/src
+# Schema for the startup auto-migrate (gateway resolves ../../../db/init.sql -> /app/db).
+COPY db /app/db
 COPY --from=frontend-build /app/frontend/dist /app/frontend-dist
 RUN mkdir -p /app/gateway/.wa-media
 

@@ -56,4 +56,10 @@ export const config = {
   // per chat from the dashboard/CLI — not from env.
   proactiveSchedulerEnabled: (process.env.PROACTIVE_SCHEDULER ?? "on") !== "off",
   proactiveTickMs: Number(process.env.PROACTIVE_TICK_MS ?? 30000),
+
+  // Apply the idempotent db/init.sql at startup so a managed DB self-heals after
+  // a schema-changing deploy (no separate migration runner). AUTO_MIGRATE=off to
+  // disable; DB_INIT_SQL overrides the path to the schema file.
+  autoMigrate: (process.env.AUTO_MIGRATE ?? "on") !== "off",
+  initSqlPath: process.env.DB_INIT_SQL ?? "",
 };
