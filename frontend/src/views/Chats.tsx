@@ -14,7 +14,7 @@ import {
 } from "../components/ui";
 import { cn } from "../lib/cn";
 import { toast } from "sonner";
-import { Pencil, Check, X } from "lucide-react";
+import { Pencil, Check, X, Power, PowerOff } from "lucide-react";
 
 export function Chats() {
   const qc = useQueryClient();
@@ -43,6 +43,25 @@ export function Chats() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const bulkAgent = useMutation({
+    mutationFn: (agent_enabled: boolean) =>
+      api.chats.bulkAgent({ q: q || undefined, label: labelFilter || undefined, agent_enabled }),
+    onSuccess: ({ updated }, agent_enabled) => {
+      qc.invalidateQueries({ queryKey: ["chats"] });
+      toast.success(`Agente ${agent_enabled ? "activado" : "desactivado"} en ${updated} chat(s)`);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const loaded = chatsQ.data?.length ?? 0;
+  const filtered = Boolean(q || labelFilter);
+  const runBulk = (enabled: boolean) => {
+    const scope = filtered ? `los ${loaded}+ chats del filtro actual` : `TODOS los chats (${loaded}+)`;
+    if (confirm(`¿${enabled ? "Activar" : "Desactivar"} el agente para ${scope}?`)) {
+      bulkAgent.mutate(enabled);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <Card className="lg:col-span-2">
@@ -69,6 +88,29 @@ export function Chats() {
             </select>
           </div>
         </CardHeader>
+        <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800 px-3 py-2">
+          <span className="text-[11px] text-zinc-500">
+            Acciones masivas {filtered ? "(filtro actual)" : "(todos los chats)"}:
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={bulkAgent.isPending || loaded === 0}
+            onClick={() => runBulk(true)}
+            title="Activar el agente para los chats que coinciden con la búsqueda/etiqueta de arriba"
+          >
+            <Power className="h-3.5 w-3.5" /> Activar agente
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={bulkAgent.isPending || loaded === 0}
+            onClick={() => runBulk(false)}
+            title="Desactivar el agente para los chats que coinciden con la búsqueda/etiqueta de arriba"
+          >
+            <PowerOff className="h-3.5 w-3.5" /> Desactivar agente
+          </Button>
+        </div>
         <CardBody className="max-h-[70vh] overflow-y-auto p-0">
           {chatsQ.data?.length ? (
             <div className="divide-y divide-zinc-800">

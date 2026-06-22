@@ -12,6 +12,7 @@ import type {
   AgentStatePatch,
   Chat,
   ChatListFilter,
+  ChatBulkFilter,
   ChatPatch,
   ChatUpsert,
   ChatWithStats,
@@ -49,7 +50,7 @@ const iso = (v: Date | string | null): string | null =>
 export class PostgresAgentStateRepository implements AgentStateRepository {
   async get(): Promise<AgentState> {
     const { rows } = await pool.query<AgentState>(
-      "SELECT enabled, draft_mode, user_name FROM agent_state WHERE id = 1"
+      "SELECT enabled, draft_mode, user_name, global_prompt FROM agent_state WHERE id = 1"
     );
     if (rows.length === 0) {
       throw new Error("agent_state row missing — did db/init.sql run?");
@@ -72,6 +73,10 @@ export class PostgresAgentStateRepository implements AgentStateRepository {
     if (patch.user_name !== undefined) {
       sets.push(`user_name = $${i++}`);
       values.push(patch.user_name);
+    }
+    if (patch.global_prompt !== undefined) {
+      sets.push(`global_prompt = $${i++}`);
+      values.push(patch.global_prompt);
     }
     if (sets.length > 0) {
       await pool.query(`UPDATE agent_state SET ${sets.join(", ")} WHERE id = 1`, values);
@@ -272,6 +277,28 @@ export class PostgresChatRepository implements ChatRepository {
       "SELECT COUNT(*)::int AS n FROM chats WHERE name IS NOT NULL AND name <> ''"
     );
     return rows[0]?.n ?? 0;
+  }
+
+  async bulkSetAgentEnabled(filter: ChatBulkFilter, enabled: boolean): Promise<number> {
+    // Mirror list()'s matching (substring q over name+id, plus label). The owner
+    // pseudo-chat is always excluded.
+    const where = ["id <> $1"];
+    const values: unknown[] = [OWNER_CHAT_ID, enabled];
+    let i = 3;
+    if (filter.label) {
+      where.push(`label = $${i++}`);
+      values.push(filter.label);
+    }
+    if (filter.q) {
+      where.push(`(name ILIKE $${i} OR id ILIKE $${i})`);
+      values.push(`%${filter.q}%`);
+      i++;
+    }
+    const { rowCount } = await pool.query(
+      `UPDATE chats SET agent_enabled = $2 WHERE ${where.join(" AND ")}`,
+      values
+    );
+    return rowCount ?? 0;
   }
 
   async ensureOwnerChat(): Promise<void> {

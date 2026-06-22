@@ -35,11 +35,14 @@ export type AgentState = {
   enabled: boolean;
   draft_mode: boolean;
   user_name: string;
+  /** Owner instruction injected into every reply, on top of the per-label template. */
+  global_prompt: string;
 };
 export type AgentStatePatch = {
   enabled?: boolean;
   draft_mode?: boolean;
   user_name?: string;
+  global_prompt?: string;
 };
 
 // --- Chats -------------------------------------------------------------------
@@ -82,6 +85,8 @@ export type ChatPatch = {
   proactive_next_ts?: Date | null;
 };
 export type ChatListFilter = { label?: string; q?: string; limit?: number; offset?: number };
+/** Filter for bulk operations — same matching as the list (substring q + label), no paging. */
+export type ChatBulkFilter = { label?: string; q?: string };
 
 /**
  * Where a chat name came from, in ascending precedence:

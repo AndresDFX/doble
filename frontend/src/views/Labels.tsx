@@ -43,6 +43,8 @@ export function Labels() {
 
   return (
     <div className="space-y-4">
+      <GlobalPromptCard />
+
       <Card>
         <CardHeader>
           <CardTitle>Etiquetas y prompts</CardTitle>
@@ -68,6 +70,54 @@ export function Labels() {
         />
       ))}
     </div>
+  );
+}
+
+function GlobalPromptCard() {
+  const qc = useQueryClient();
+  const stateQ = useQuery({ queryKey: ["state"], queryFn: api.state.get });
+  const [draft, setDraft] = useState<string | null>(null);
+  const current = stateQ.data?.global_prompt ?? "";
+  const value = draft ?? current;
+  const dirty = draft !== null && draft !== current;
+
+  const save = useMutation({
+    mutationFn: (global_prompt: string) => api.state.patch({ global_prompt }),
+    onSuccess: (next) => {
+      qc.setQueryData(["state"], next);
+      setDraft(null);
+      toast.success("Prompt general guardado");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Prompt general</CardTitle>
+        <Button
+          size="sm"
+          variant="primary"
+          disabled={!dirty || save.isPending}
+          onClick={() => save.mutate(value)}
+        >
+          <Save className="h-3.5 w-3.5" /> Guardar
+        </Button>
+      </CardHeader>
+      <CardBody className="space-y-2">
+        <p className="text-xs text-zinc-500">
+          Instrucción que se aplica a <strong>todas</strong> las respuestas, encima de la plantilla
+          de cada etiqueta. Útil para reglas transversales de tono o datos fijos (ej.: "nunca uses
+          emojis con desconocidos", "firma como J cuando sea trabajo"). Vacío = sin efecto.
+        </p>
+        <Textarea
+          value={value}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={4}
+          placeholder="Ej: Responde siempre en español. Nunca prometas fechas sin confirmarlas."
+        />
+      </CardBody>
+    </Card>
   );
 }
 

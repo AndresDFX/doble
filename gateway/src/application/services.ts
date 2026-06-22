@@ -9,6 +9,7 @@ import { OWNER_CHAT_ID, OWNER_LABEL } from "../domain/entities.js";
 import type {
   AgentState,
   AgentStatePatch,
+  ChatBulkFilter,
   ChatListFilter,
   ChatPatch,
   ChatWithStats,
@@ -98,6 +99,10 @@ export class ChatService {
     }
 
     return this.chats.patch(id, next);
+  }
+  /** Bulk enable/disable the agent for chats matching a filter. Returns count updated. */
+  bulkSetAgent(filter: ChatBulkFilter, enabled: boolean): Promise<number> {
+    return this.chats.bulkSetAgentEnabled(filter, enabled);
   }
   listMessages(filter: MessageListFilter): Promise<MessageView[]> {
     return this.messages.listByChat(filter);

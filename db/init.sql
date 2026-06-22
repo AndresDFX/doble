@@ -98,11 +98,17 @@ CREATE INDEX IF NOT EXISTS message_embeddings_ivfflat_idx
   WITH (lists = 100);
 
 CREATE TABLE IF NOT EXISTS agent_state (
-  id          INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-  enabled     BOOLEAN NOT NULL DEFAULT TRUE,
-  draft_mode  BOOLEAN NOT NULL DEFAULT TRUE,
-  user_name   TEXT NOT NULL DEFAULT 'Yo'
+  id            INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  enabled       BOOLEAN NOT NULL DEFAULT TRUE,
+  draft_mode    BOOLEAN NOT NULL DEFAULT TRUE,
+  user_name     TEXT NOT NULL DEFAULT 'Yo',
+  -- Instrucción global del dueño, inyectada en TODAS las respuestas (encima de la
+  -- plantilla por etiqueta). Editable desde el dashboard. Vacío = sin efecto.
+  global_prompt TEXT NOT NULL DEFAULT ''
 );
+
+-- Idempotente: actualiza un agent_state existente (init.sql solo corre auto en DB nueva).
+ALTER TABLE agent_state ADD COLUMN IF NOT EXISTS global_prompt TEXT NOT NULL DEFAULT '';
 
 INSERT INTO agent_state (id, enabled, draft_mode, user_name)
 VALUES (1, TRUE, TRUE, 'Yo')

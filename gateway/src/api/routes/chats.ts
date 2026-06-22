@@ -33,6 +33,19 @@ export async function registerChatRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  app.post<{ Body: { q?: string; label?: string; agent_enabled?: boolean } }>(
+    "/api/chats/bulk-agent",
+    async (req, reply) => {
+      const { q, label, agent_enabled } = req.body ?? {};
+      if (typeof agent_enabled !== "boolean") {
+        reply.status(400);
+        return { error: "agent_enabled (boolean) is required" };
+      }
+      const updated = await container.chats.bulkSetAgent({ q, label }, agent_enabled);
+      return { updated };
+    }
+  );
+
   app.get<{ Params: { id: string } }>("/api/chats/:id", async (req, reply) => {
     const chat = await container.chats.get(req.params.id);
     if (!chat) {

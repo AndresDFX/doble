@@ -10,6 +10,7 @@ import type {
   AgentState,
   AgentStatePatch,
   Chat,
+  ChatBulkFilter,
   ChatListFilter,
   ChatPatch,
   ChatUpsert,
@@ -46,6 +47,12 @@ export interface ChatRepository {
   list(filter: ChatListFilter): Promise<ChatWithStats[]>;
   upsert(chat: ChatUpsert): Promise<void>;
   patch(id: string, patch: ChatPatch): Promise<void>;
+  /**
+   * Bulk enable/disable the agent for every chat matching the filter (same
+   * substring `q` + `label` matching as `list`). Skips the reserved owner chat.
+   * Returns the number of chats updated.
+   */
+  bulkSetAgentEnabled(filter: ChatBulkFilter, enabled: boolean): Promise<number>;
   ensureOwnerChat(): Promise<void>;
   /**
    * Persist contact names (batched) onto EXISTING chats only — names attach to

@@ -2,6 +2,7 @@ export type AgentState = {
   enabled: boolean;
   draft_mode: boolean;
   user_name: string;
+  global_prompt: string;
 };
 
 export type WaStatus = {
@@ -221,6 +222,11 @@ export const api = {
       http<Message[]>(
         `/api/chats/${encodeURIComponent(id)}/messages?limit=${limit}`
       ),
+    bulkAgent: (body: { q?: string; label?: string; agent_enabled: boolean }) =>
+      http<{ updated: number }>("/api/chats/bulk-agent", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
   },
   drafts: {
     list: (status: Draft["status"] = "pending") =>

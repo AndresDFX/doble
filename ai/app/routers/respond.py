@@ -10,6 +10,7 @@ from ..llm_client import generate_content
 from ..prompts.builder import (
     build_gemini_prompt,
     build_proactive_prompt,
+    get_global_prompt,
     get_label_config,
     get_user_name,
 )
@@ -107,6 +108,7 @@ async def respond(req: RespondRequest) -> RespondResponse:
 
     template, temperature, max_distance, examples = await get_label_config(label)
     user_name = await get_user_name()
+    global_prompt = await get_global_prompt()
 
     embedding = await embed(req.message_text)
     context = await search(
@@ -126,6 +128,7 @@ async def respond(req: RespondRequest) -> RespondResponse:
         sender_name=req.sender_name,
         incoming_text=req.message_text,
         examples=examples,
+        global_prompt=global_prompt,
     )
 
     temperature = _adapt_temperature(temperature, req.message_text, context)

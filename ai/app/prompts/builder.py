@@ -45,6 +45,15 @@ async def get_user_name() -> str:
     return row[0] if row else "Yo"
 
 
+async def get_global_prompt() -> str:
+    """Owner-wide instruction applied to every reply (on top of the label template)."""
+    async with conn() as c:
+        row = await (
+            await c.execute("SELECT global_prompt FROM agent_state WHERE id = 1")
+        ).fetchone()
+    return (row[0] or "").strip() if row else ""
+
+
 def build_gemini_prompt(
     system_template: str,
     user_name: str,
@@ -54,9 +63,17 @@ def build_gemini_prompt(
     sender_name: str | None,
     incoming_text: str,
     examples: str | None = None,
+    global_prompt: str = "",
 ) -> tuple[str, str]:
     """Returns (system_instruction, user_content) tuple for Gemini generate_content."""
     system = system_template.format(user_name=user_name)
+    if global_prompt:
+        system += (
+            "\n\n--- Instrucciones generales del dueño (aplican SIEMPRE) ---\n"
+            f"{global_prompt}\n"
+            "Respeta estas instrucciones en todos los chats, salvo que choquen con la "
+            "regla de no inventar datos."
+        )
     if chat_name:
         system += f"\n\nEste chat se llama: {chat_name}. Ese es el nombre del CONTACTO."
     else:
