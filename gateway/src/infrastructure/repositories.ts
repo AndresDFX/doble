@@ -15,6 +15,7 @@ import type {
   ChatPatch,
   ChatUpsert,
   ChatWithStats,
+  ContactNameRecord,
   DraftInsert,
   DraftListFilter,
   DraftPatch,
@@ -173,10 +174,62 @@ export class PostgresChatRepository implements ChatRepository {
     if (patch.name !== undefined) {
       sets.push(`name = $${i++}`);
       values.push(patch.name);
+      // A dashboard edit is authoritative: mark it 'manual' (or clear the source
+      // when the name is cleared) so contact identification won't overwrite it.
+      sets.push(`name_source = $${i++}`);
+      values.push(patch.name == null || patch.name === "" ? null : "manual");
     }
     if (sets.length === 0) return;
     values.push(id);
     await pool.query(`UPDATE chats SET ${sets.join(", ")} WHERE id = $${i}`, values);
+  }
+
+  // Precedence of a name_source value as a SQL expression: manual(3) > contact(2)
+  // > push(1) > none(0). Used to decide whether an incoming name may overwrite.
+  private static readonly PRIO = (col: string) =>
+    `(CASE ${col} WHEN 'manual' THEN 3 WHEN 'contact' THEN 2 WHEN 'push' THEN 1 ELSE 0 END)`;
+
+  async recordContactNames(records: ContactNameRecord[]): Promise<number> {
+    // Dedupe by id within the batch (a row can't be matched twice in UPDATE..FROM),
+    // keeping the highest-precedence record per id.
+    const prio = { manual: 3, contact: 2, push: 1 } as const;
+    const byId = new Map<string, ContactNameRecord>();
+    for (const r of records) {
+      const name = r.name?.trim();
+      if (!r.id || !name) continue;
+      const prev = byId.get(r.id);
+      if (!prev || prio[r.source] >= prio[prev.source]) byId.set(r.id, { ...r, name });
+    }
+    const list = [...byId.values()];
+    if (list.length === 0) return 0;
+
+    const values: unknown[] = [];
+    const tuples = list.map((r, n) => {
+      values.push(r.id, r.name, r.source);
+      return `($${n * 3 + 1}, $${n * 3 + 2}, $${n * 3 + 3})`;
+    });
+    // Update-only: Doble's `chats` are conversations, not the whole address book.
+    // We name chats that already exist; we never create a row per contact (that
+    // would flood the Chats list). The incoming pipeline creates the chat row;
+    // here we just attach/upgrade its name when the new source has >= precedence.
+    const vPrio = PostgresChatRepository.PRIO("v.name_source");
+    const cPrio = PostgresChatRepository.PRIO("chats.name_source");
+    const { rowCount } = await pool.query(
+      `UPDATE chats SET name = v.name, name_source = v.name_source
+       FROM (VALUES ${tuples.join(", ")}) AS v(id, name, name_source)
+       WHERE chats.id = v.id
+         AND COALESCE(v.name, '') <> ''
+         AND ${vPrio} >= ${cPrio}`,
+      values
+    );
+    return rowCount ?? 0;
+  }
+
+  async countNamed(): Promise<number> {
+    const { rows } = await pool.query<{ n: number }>(
+      "SELECT COUNT(*)::int AS n FROM chats WHERE name IS NOT NULL AND name <> ''"
+    );
+    return rows[0]?.n ?? 0;
   }
 
   async ensureOwnerChat(): Promise<void> {

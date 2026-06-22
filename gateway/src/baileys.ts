@@ -14,6 +14,11 @@ import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { getAuthState } from "./infrastructure/auth-state.js";
+import {
+  attachContactSync,
+  maybeResyncAddressBook,
+  queueContactName,
+} from "./infrastructure/contact-sync.js";
 import { setSock } from "./infrastructure/whatsapp-socket.js";
 import { container } from "./composition/container.js";
 import { waStatus } from "./wa-status.js";
@@ -40,6 +45,7 @@ export async function startBaileys(): Promise<void> {
   setSock(sock);
 
   sock.ev.on("creds.update", saveCreds);
+  attachContactSync(sock);
 
   sock.ev.on("connection.update", (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -62,6 +68,8 @@ export async function startBaileys(): Promise<void> {
         message: `Conexión WhatsApp abierta${meName ? ` (${meName})` : ""}`,
         meta: { id: meId },
       });
+      // Populate the address book without re-linking if it looks empty.
+      void maybeResyncAddressBook(sock);
     }
     if (connection === "close") {
       const code =
@@ -103,6 +111,11 @@ export async function startBaileys(): Promise<void> {
     if (type !== "notify" && type !== "append") return;
     const shouldReply = type === "notify";
     for (const msg of messages) {
+      // Contact identification: fill the chat name from the sender's pushName
+      // (lowest precedence — won't overwrite an address-book or manual name).
+      if (!msg.key.fromMe && msg.pushName && msg.key.remoteJid) {
+        queueContactName(msg.key.remoteJid, msg.pushName, "push");
+      }
       try {
         const extracted = await extractMessage(sock, msg);
         if (extracted) {

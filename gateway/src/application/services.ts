@@ -12,6 +12,7 @@ import type {
   ChatListFilter,
   ChatPatch,
   ChatWithStats,
+  ContactNameRecord,
   DraftListFilter,
   DraftPatch,
   DraftView,
@@ -70,6 +71,13 @@ export class ChatService {
   }
   listMessages(filter: MessageListFilter): Promise<MessageView[]> {
     return this.messages.listByChat(filter);
+  }
+  /** Contact identification: persist names harvested from WhatsApp (batched). */
+  recordContactNames(records: ContactNameRecord[]): Promise<number> {
+    return this.chats.recordContactNames(records);
+  }
+  countNamed(): Promise<number> {
+    return this.chats.countNamed();
   }
 }
 

@@ -14,6 +14,7 @@ import type {
   ChatPatch,
   ChatUpsert,
   ChatWithStats,
+  ContactNameRecord,
   DraftInsert,
   DraftListFilter,
   DraftPatch,
@@ -46,6 +47,15 @@ export interface ChatRepository {
   upsert(chat: ChatUpsert): Promise<void>;
   patch(id: string, patch: ChatPatch): Promise<void>;
   ensureOwnerChat(): Promise<void>;
+  /**
+   * Persist contact names (batched) onto EXISTING chats only — names attach to
+   * conversations, never create a row per address-book contact. Updates a name
+   * only when the incoming source has >= precedence than the stored one, so a
+   * manual name is never clobbered. Returns the number of rows updated.
+   */
+  recordContactNames(records: ContactNameRecord[]): Promise<number>;
+  /** Count chats that already have a name — drives the address-book resync heuristic. */
+  countNamed(): Promise<number>;
 }
 
 export interface MessageRepository {

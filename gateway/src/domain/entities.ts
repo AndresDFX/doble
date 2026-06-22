@@ -64,6 +64,15 @@ export type ChatUpsert = {
 export type ChatPatch = { label?: string | null; agent_enabled?: boolean; name?: string | null };
 export type ChatListFilter = { label?: string; q?: string; limit?: number; offset?: number };
 
+/**
+ * Where a chat name came from, in ascending precedence:
+ * 'push' (self-reported / pushName) < 'contact' (your WhatsApp address book) <
+ * 'manual' (edited in the dashboard). Contact identification fills names but
+ * never overwrites a higher-precedence source — a manual name always wins.
+ */
+export type ContactNameSource = "manual" | "contact" | "push";
+export type ContactNameRecord = { id: string; name: string; source: ContactNameSource };
+
 // --- Messages ----------------------------------------------------------------
 export type Message = {
   id: string;

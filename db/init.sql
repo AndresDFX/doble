@@ -11,6 +11,12 @@ CREATE TABLE IF NOT EXISTS chats (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Procedencia del nombre del chat: 'manual' (editado en el dashboard, máxima
+-- prioridad), 'contact' (agenda de WhatsApp), 'push' (nombre auto-reportado /
+-- pushName). NULL = sin nombre. La identificación de contactos rellena este
+-- campo sin pisar nunca un nombre 'manual'.
+ALTER TABLE chats ADD COLUMN IF NOT EXISTS name_source TEXT;
+
 -- Idempotente: init.sql solo corre auto en volumen nuevo; este ALTER actualiza un postgres_data existente.
 ALTER TABLE chats ADD COLUMN IF NOT EXISTS phone TEXT;
 

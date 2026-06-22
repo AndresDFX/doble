@@ -134,5 +134,6 @@ Pseudo-chat reservado con `chat_id = '__owner__'` y `label = '__owner__'`, gesti
 - Compose stack: [docker-compose.yml](docker-compose.yml)
 - Dockerfiles: [gateway/Dockerfile](gateway/Dockerfile), [ai/Dockerfile](ai/Dockerfile), [frontend/Dockerfile](frontend/Dockerfile) + [frontend/nginx.conf](frontend/nginx.conf)
 - Sesión Baileys (disco vs DynamoDB): [gateway/src/infrastructure/auth-state.ts](gateway/src/infrastructure/auth-state.ts) + [dynamo-auth.ts](gateway/src/infrastructure/dynamo-auth.ts)
+- Identificación de contactos (nombre desde agenda/pushName, precedencia manual>contact>push): [gateway/src/infrastructure/contact-sync.ts](gateway/src/infrastructure/contact-sync.ts) → `chats.name` + columna `name_source`. Solo nombra conversaciones existentes (no inserta la agenda entera).
 - Basic Auth + serving del SPA (Render): [gateway/src/api/hosting.ts](gateway/src/api/hosting.ts)
 - Despliegue en Render (free tier): [render.yaml](render.yaml) + [Dockerfile.render](Dockerfile.render) + [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md)
