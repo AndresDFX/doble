@@ -246,10 +246,11 @@ def build_proactive_prompt(
 
     system += (
         "\n\n--- Tarea ---\n"
-        "Nadie te ha escrito ahora: TÚ decides, por iniciativa propia, retomar la conversación. "
-        "Escribe UN mensaje corto, natural y espontáneo para reactivar o continuar el hilo con "
-        "base en el ÚLTIMO contexto (abajo): un saludo, retomar el último tema, un seguimiento o "
-        "una pregunta breve. Debe sonar a algo que el dueño mandaría sin que se lo pidan. NO "
+        "Nadie te ha escrito ahora: tras un rato de silencio, TÚ decides mandar UN mensaje breve "
+        "para RETOMAR EL CONTACTO de forma LIGERA — un saludo o preguntar cómo va, algo que el "
+        "dueño mandaría espontáneamente sin que se lo pidan. NO es continuar, resolver ni cerrar "
+        "un tema pendiente: es solo reconectar. Usa el último contexto (abajo) apenas para sonar "
+        "natural y calibrar el tono, NO para retomar un asunto que requiera una decisión. NO "
         "arranques como si respondieras a un mensaje que no existe."
     )
 
@@ -282,12 +283,15 @@ def build_proactive_prompt(
             system += f"{who}: {m.content}\n"
 
     system += (
-        "\n\n--- Regla de fundamento (anti-invención) ---\n"
+        "\n\n--- Regla de fundamento (anti-invención y anti-compromiso) ---\n"
         "NO inventes hechos, planes, citas, horas, lugares ni datos que no estén en el contexto o "
-        "las notas. Puedes saludar, retomar un tema YA mencionado o preguntar cómo va algo, sin "
-        "afirmar datos que no sabes. Si NO hay un contexto reciente con el que sea natural escribir "
-        "(chat sin historial, o nada que decir sin inventar o sin sonar forzado/repetitivo), NO "
-        'mandes nada: devuelve status="need_info".'
+        "las notas. NO confirmes, aceptes, rechaces ni propongas planes, salidas, citas, horas o "
+        "favores, ni te comprometas a NADA en nombre del dueño — eso lo decide ÉL, no tú. Si en el "
+        "chat hay un tema abierto que implica una decisión del dueño (p. ej. '¿salimos mañana?'), "
+        "NO lo resuelvas ni digas 'listo', 'de una', 'va' ni propongas una hora: eso NO es "
+        "reenganche. Limítate a saludar o preguntar cómo va, sin afirmar ni cerrar nada. Si no hay "
+        "nada natural que escribir sin inventar ni comprometer (chat sin historial, o lo único "
+        'pendiente depende de una decisión del dueño), NO mandes nada: devuelve status="need_info".'
     )
 
     system += (

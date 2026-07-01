@@ -89,6 +89,8 @@ export class ChatService {
       next.proactive_next_ts = null;
     } else if (next.proactive_enabled === true) {
       const chat = await this.chats.get(id);
+      // Fresh start: clear the nudge cap so a re-enable can re-engage.
+      next.proactive_unanswered = 0;
       // Only seed a schedule if there isn't one — so re-saving an already-enabled
       // chat (e.g. just changing the range) doesn't reset its cadence.
       if (!chat?.proactive_next_ts) {

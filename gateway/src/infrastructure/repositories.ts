@@ -90,7 +90,8 @@ export class PostgresAgentStateRepository implements AgentStateRepository {
 // Columns shared by every chat SELECT — keeps the proactive fields in one place.
 const CHAT_COLS =
   "c.id, c.name, c.label, c.agent_enabled, c.phone, " +
-  "c.proactive_enabled, c.proactive_min_minutes, c.proactive_max_minutes, c.proactive_next_ts";
+  "c.proactive_enabled, c.proactive_min_minutes, c.proactive_max_minutes, " +
+  "c.proactive_next_ts, c.proactive_unanswered";
 
 type ChatRow = {
   id: string;
@@ -102,6 +103,7 @@ type ChatRow = {
   proactive_min_minutes: number;
   proactive_max_minutes: number;
   proactive_next_ts: Date | null;
+  proactive_unanswered: number;
 };
 type ChatStatsRow = ChatRow & {
   msgs: number;
@@ -119,13 +121,15 @@ const toChat = (r: ChatRow): Chat => ({
   proactive_min_minutes: r.proactive_min_minutes,
   proactive_max_minutes: r.proactive_max_minutes,
   proactive_next_ts: iso(r.proactive_next_ts),
+  proactive_unanswered: r.proactive_unanswered,
 });
 
 export class PostgresChatRepository implements ChatRepository {
   async get(id: string): Promise<Chat | null> {
     const { rows } = await pool.query<ChatRow>(
       `SELECT id, name, label, agent_enabled, phone,
-              proactive_enabled, proactive_min_minutes, proactive_max_minutes, proactive_next_ts
+              proactive_enabled, proactive_min_minutes, proactive_max_minutes,
+              proactive_next_ts, proactive_unanswered
        FROM chats WHERE id = $1`,
       [id]
     );
@@ -226,6 +230,10 @@ export class PostgresChatRepository implements ChatRepository {
       sets.push(`proactive_next_ts = $${i++}`);
       values.push(patch.proactive_next_ts);
     }
+    if (patch.proactive_unanswered !== undefined) {
+      sets.push(`proactive_unanswered = $${i++}`);
+      values.push(patch.proactive_unanswered);
+    }
     if (sets.length === 0) return;
     values.push(id);
     await pool.query(`UPDATE chats SET ${sets.join(", ")} WHERE id = $${i}`, values);
@@ -313,7 +321,8 @@ export class PostgresChatRepository implements ChatRepository {
   async listProactiveDue(now: Date): Promise<Chat[]> {
     const { rows } = await pool.query<ChatRow>(
       `SELECT id, name, label, agent_enabled, phone,
-              proactive_enabled, proactive_min_minutes, proactive_max_minutes, proactive_next_ts
+              proactive_enabled, proactive_min_minutes, proactive_max_minutes,
+              proactive_next_ts, proactive_unanswered
        FROM chats
        WHERE proactive_enabled = TRUE
          AND proactive_next_ts IS NOT NULL
@@ -348,6 +357,15 @@ export class PostgresMessageRepository implements MessageRepository {
       [id]
     );
     return rows[0]?.content ?? null;
+  }
+
+  async lastByChat(chatId: string): Promise<{ from_me: boolean; ts: string } | null> {
+    const { rows } = await pool.query<{ from_me: boolean; ts: Date }>(
+      "SELECT from_me, ts FROM messages WHERE chat_id = $1 ORDER BY ts DESC LIMIT 1",
+      [chatId]
+    );
+    const r = rows[0];
+    return r ? { from_me: r.from_me, ts: iso(r.ts)! } : null;
   }
 
   async listByChat(filter: MessageListFilter): Promise<MessageView[]> {
@@ -460,6 +478,17 @@ export class PostgresDraftRepository implements DraftRepository {
 
   async delete(id: number): Promise<void> {
     await pool.query("DELETE FROM drafts WHERE id = $1", [id]);
+  }
+
+  async hasPendingNeedInfo(chatId: string): Promise<boolean> {
+    const { rows } = await pool.query<{ exists: boolean }>(
+      `SELECT EXISTS(
+         SELECT 1 FROM drafts
+         WHERE chat_id = $1 AND status = 'pending' AND kind = 'needs_info'
+       ) AS exists`,
+      [chatId]
+    );
+    return rows[0]?.exists ?? false;
   }
 }
 

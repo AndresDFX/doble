@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS chats (
   proactive_max_minutes  INT NOT NULL DEFAULT 60,
   -- Próximo disparo programado (UTC). Se recalcula tras cada ciclo; null = no programado.
   proactive_next_ts      TIMESTAMPTZ,
+  -- Reenganches proactivos consecutivos SIN respuesta del contacto. Se reinicia a 0
+  -- cuando el contacto escribe. El scheduler no manda si llega al cap (evita spam).
+  proactive_unanswered   INT NOT NULL DEFAULT 0,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -32,6 +35,7 @@ ALTER TABLE chats ADD COLUMN IF NOT EXISTS proactive_enabled BOOLEAN NOT NULL DE
 ALTER TABLE chats ADD COLUMN IF NOT EXISTS proactive_min_minutes INT NOT NULL DEFAULT 1;
 ALTER TABLE chats ADD COLUMN IF NOT EXISTS proactive_max_minutes INT NOT NULL DEFAULT 60;
 ALTER TABLE chats ADD COLUMN IF NOT EXISTS proactive_next_ts TIMESTAMPTZ;
+ALTER TABLE chats ADD COLUMN IF NOT EXISTS proactive_unanswered INT NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS chats_label_idx ON chats(label);
 -- Índice parcial para la consulta de "chats pendientes de disparo" del scheduler.

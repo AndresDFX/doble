@@ -73,6 +73,8 @@ export interface MessageRepository {
   listByChat(filter: MessageListFilter): Promise<MessageView[]>;
   /** Returns the text content of a single message, or null if missing/empty. */
   getContent(id: string): Promise<string | null>;
+  /** Direction + timestamp of the most recent message in a chat; null if empty. */
+  lastByChat(chatId: string): Promise<{ from_me: boolean; ts: string } | null>;
 }
 
 export interface DraftRepository {
@@ -82,6 +84,8 @@ export interface DraftRepository {
   patch(id: number, patch: DraftPatch): Promise<void>;
   markSent(id: number): Promise<void>;
   delete(id: number): Promise<void>;
+  /** True if the chat has an unresolved abstention (pending `needs_info` draft). */
+  hasPendingNeedInfo(chatId: string): Promise<boolean>;
 }
 
 export interface LabelRepository {

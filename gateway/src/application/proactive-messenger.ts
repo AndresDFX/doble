@@ -25,7 +25,7 @@ import type {
   WhatsAppGateway,
 } from "../domain/ports.js";
 import { deliveryMode } from "../domain/reply-policy.js";
-import { decideProactive, nextProactiveAt } from "../domain/proactive-policy.js";
+import { decideNudge, nextProactiveAt } from "../domain/proactive-policy.js";
 import { deliverReply } from "./reply-delivery.js";
 
 export type ProactiveMessengerDeps = {
@@ -75,28 +75,26 @@ export class ProactiveMessenger {
     }
   }
 
-  /** Generate + deliver (or draft) one proactive message; always reschedules. */
+  /** Generate + deliver (or draft) one proactive nudge if the turn/state allow it. */
   async runForChat(chat: Chat, state: AgentState): Promise<void> {
     const d = this.deps;
+    let nudged = false;
     try {
-      const decision = decideProactive(state, chat);
+      // Turn-aware gate: it must be Doble's turn (Doble spoke last), no unresolved
+      // abstention (chat paused), and under the nudge cap. Otherwise: wait.
+      const [lastMsg, hasNeedInfo] = await Promise.all([
+        d.messages.lastByChat(chat.id),
+        d.drafts.hasPendingNeedInfo(chat.id),
+      ]);
+      const decision = decideNudge({
+        state,
+        chat,
+        lastMsgFromMe: lastMsg ? lastMsg.from_me : null,
+        hasPendingNeedInfo: hasNeedInfo,
+      });
       if (!decision.ok) {
-        // The query already filters proactive_enabled, but agent_enabled or the
-        // global switch may have flipped between queue and run. Skip (reschedules).
-        d.logger.debug({ chat_id: chat.id, reason: decision.reason }, "proactive: skipped (policy)");
+        d.logger.debug({ chat_id: chat.id, reason: decision.reason }, "proactive: skipped");
         return;
-      }
-
-      const mode = deliveryMode(state);
-
-      // Anti-pile-up: in draft mode, don't stack a second proactive draft on a
-      // chat that still has one waiting for review.
-      if (mode === "draft") {
-        const pending = await d.drafts.list({ status: "pending", chatId: chat.id, limit: 1 });
-        if (pending.length > 0) {
-          d.logger.debug({ chat_id: chat.id }, "proactive: skipped (pending draft exists)");
-          return;
-        }
       }
 
       const result = await d.ai.generateProactive({ chat_id: chat.id });
@@ -106,7 +104,7 @@ export class ProactiveMessenger {
         d.activity.push({
           kind: "ai",
           level: "info",
-          message: `Proactivo: nada que decir aún en ${chat.name ?? chat.id}`,
+          message: `Proactivo: nada natural que decir en ${chat.name ?? chat.id}`,
           meta: { chat_id: chat.id, label: chat.label, missing: result.missing, proactive: true },
         });
         d.logger.debug({ chat_id: chat.id }, "proactive: abstained (need_info/empty)");
@@ -115,7 +113,7 @@ export class ProactiveMessenger {
 
       const reply = result.reply.trim();
 
-      if (mode === "draft") {
+      if (deliveryMode(state) === "draft") {
         const draftId = await d.drafts.insert({
           chat_id: chat.id,
           reply_to_id: null,
@@ -134,29 +132,29 @@ export class ProactiveMessenger {
           meta: { chat_id: chat.id, label: chat.label, preview: reply.slice(0, 80), proactive: true },
         });
         d.logger.info({ draftId, chat_id: chat.id }, "Proactive draft saved (draft_mode=true)");
-        return;
+      } else {
+        await deliverReply(
+          {
+            whatsapp: d.whatsapp,
+            messages: d.messages,
+            ai: d.ai,
+            events: d.events,
+            clock: d.clock,
+            logger: d.logger,
+          },
+          chat.id,
+          reply,
+          chat.label
+        );
+        d.activity.push({
+          kind: "message-out",
+          level: "success",
+          message: `Mensaje proactivo enviado a ${chat.name ?? chat.id}`,
+          meta: { chat_id: chat.id, label: chat.label, preview: reply.slice(0, 80), proactive: true },
+        });
+        d.logger.info({ chat_id: chat.id }, "Proactive message sent");
       }
-
-      await deliverReply(
-        {
-          whatsapp: d.whatsapp,
-          messages: d.messages,
-          ai: d.ai,
-          events: d.events,
-          clock: d.clock,
-          logger: d.logger,
-        },
-        chat.id,
-        reply,
-        chat.label
-      );
-      d.activity.push({
-        kind: "message-out",
-        level: "success",
-        message: `Mensaje proactivo enviado a ${chat.name ?? chat.id}`,
-        meta: { chat_id: chat.id, label: chat.label, preview: reply.slice(0, 80), proactive: true },
-      });
-      d.logger.info({ chat_id: chat.id }, "Proactive message sent");
+      nudged = true;
     } catch (err) {
       d.logger.error({ err, chat_id: chat.id }, "proactive: runForChat failed");
       d.activity.push({
@@ -166,13 +164,14 @@ export class ProactiveMessenger {
         meta: { chat_id: chat.id },
       });
     } finally {
-      // ALWAYS reschedule — even on error or abstención — so a bad cycle never
-      // stops the chat's cadence and a due row never hot-loops the scheduler.
-      await this.reschedule(chat);
+      // ALWAYS reschedule — even on skip/error — so a due row never hot-loops.
+      // Count the nudge only when one actually went out (so the cap tracks real
+      // unanswered re-engagements, not skipped cycles).
+      await this.reschedule(chat, nudged);
     }
   }
 
-  private async reschedule(chat: Chat): Promise<void> {
+  private async reschedule(chat: Chat, incrementNudge: boolean): Promise<void> {
     const d = this.deps;
     try {
       const next = nextProactiveAt(
@@ -180,7 +179,12 @@ export class ProactiveMessenger {
         chat.proactive_min_minutes,
         chat.proactive_max_minutes
       );
-      await d.chats.patch(chat.id, { proactive_next_ts: next });
+      await d.chats.patch(
+        chat.id,
+        incrementNudge
+          ? { proactive_next_ts: next, proactive_unanswered: chat.proactive_unanswered + 1 }
+          : { proactive_next_ts: next }
+      );
       d.logger.debug({ chat_id: chat.id, next: next.toISOString() }, "proactive: rescheduled");
     } catch (err) {
       d.logger.warn({ err, chat_id: chat.id }, "proactive: failed to reschedule");

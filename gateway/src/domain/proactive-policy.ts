@@ -66,3 +66,46 @@ export function decideProactive(state: AgentState, chat: Chat): ProactiveDecisio
   if (!chat.proactive_enabled) return { ok: false, reason: "proactive-disabled" };
   return { ok: true };
 }
+
+/**
+ * Max proactive nudges Doble may send without a contact reply. A believable
+ * "double" sends ONE re-engagement and then waits — not three into the void.
+ */
+export const NUDGE_CAP = 1;
+
+export type NudgeDecision =
+  | { ok: true }
+  | {
+      ok: false;
+      reason:
+        | "agent-disabled"
+        | "chat-disabled"
+        | "proactive-disabled"
+        | "pending-need-info"
+        | "contact-turn"
+        | "no-history"
+        | "cap-reached";
+    };
+
+/**
+ * Whether Doble should send a proactive re-engagement RIGHT NOW, on top of the
+ * basic opt-in checks. It is the contact's turn to speak unless Doble spoke last;
+ * an unresolved abstention (`needs_info`) pauses the chat; and Doble never piles
+ * more than `NUDGE_CAP` unanswered nudges. Pure — the caller supplies the state.
+ */
+export function decideNudge(input: {
+  state: AgentState;
+  chat: Chat;
+  /** Direction of the most recent message in the chat; null when the chat is empty. */
+  lastMsgFromMe: boolean | null;
+  hasPendingNeedInfo: boolean;
+}): NudgeDecision {
+  const base = decideProactive(input.state, input.chat);
+  if (!base.ok) return base;
+  if (input.hasPendingNeedInfo) return { ok: false, reason: "pending-need-info" };
+  if (input.lastMsgFromMe === null) return { ok: false, reason: "no-history" };
+  // The contact wrote last → it's the reactive pipeline's turn, not a nudge.
+  if (input.lastMsgFromMe === false) return { ok: false, reason: "contact-turn" };
+  if (input.chat.proactive_unanswered >= NUDGE_CAP) return { ok: false, reason: "cap-reached" };
+  return { ok: true };
+}

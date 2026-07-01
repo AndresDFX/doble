@@ -63,6 +63,8 @@ export type Chat = {
   proactive_max_minutes: number;
   /** ISO timestamp of the next scheduled proactive send; null when unscheduled. */
   proactive_next_ts: string | null;
+  /** Consecutive proactive nudges with no contact reply; reset to 0 when the contact writes. */
+  proactive_unanswered: number;
 };
 export type ChatWithStats = Chat & {
   msgs: number;
@@ -83,6 +85,8 @@ export type ChatPatch = {
   proactive_max_minutes?: number;
   /** Internal: set by ChatService/scheduler, never accepted straight from the HTTP body. */
   proactive_next_ts?: Date | null;
+  /** Internal: nudge counter, managed by the pipeline/scheduler. */
+  proactive_unanswered?: number;
 };
 export type ChatListFilter = { label?: string; q?: string; limit?: number; offset?: number };
 /** Filter for bulk operations — same matching as the list (substring q + label), no paging. */

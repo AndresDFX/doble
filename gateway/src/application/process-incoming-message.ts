@@ -28,6 +28,7 @@ import {
   isOwnMessage,
   needsTranscription,
 } from "../domain/reply-policy.js";
+import { nextProactiveAt } from "../domain/proactive-policy.js";
 import { deliverReply } from "./reply-delivery.js";
 
 export type ProcessIncomingDeps = {
@@ -116,6 +117,23 @@ export class ProcessIncomingMessage {
       return;
     }
 
+    // The contact just wrote: restart the proactive "silence" window and clear
+    // the nudge cap for this chat (only when proactive is on). This is what makes
+    // proactive re-engage only after real silence, and lets it nudge again later.
+    if (chat?.proactive_enabled) {
+      const t = d.clock.now();
+      await d.chats
+        .patch(msg.chat_id, {
+          proactive_unanswered: 0,
+          proactive_next_ts: nextProactiveAt(
+            t,
+            chat.proactive_min_minutes,
+            chat.proactive_max_minutes
+          ),
+        })
+        .catch((err) => d.logger.warn({ err, chat_id: msg.chat_id }, "proactive reset failed"));
+    }
+
     const state = await d.agentState.get();
     const decision = decideReply(state, chat);
     if (!decision.reply) {
@@ -125,6 +143,23 @@ export class ProcessIncomingMessage {
           ? "Agent globally disabled"
           : "Agent disabled for this chat"
       );
+      return;
+    }
+
+    // R1 — while an abstention is unresolved, pause the chat: don't answer newer
+    // messages out of order until the owner supplies the missing context (a note
+    // resolves it via RetryNeedInfo). The message is already persisted.
+    if (await d.drafts.hasPendingNeedInfo(msg.chat_id)) {
+      d.logger.info(
+        { chat_id: msg.chat_id },
+        "Reply paused — unresolved need_info for this chat"
+      );
+      d.activity.push({
+        kind: "system",
+        level: "info",
+        message: `En pausa: falta contexto pendiente en ${chat?.name ?? msg.chat_id}`,
+        meta: { chat_id: msg.chat_id },
+      });
       return;
     }
 
