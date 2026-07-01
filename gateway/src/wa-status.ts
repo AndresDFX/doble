@@ -31,6 +31,15 @@ class WaStatusStore extends EventEmitter {
     this.update({ qr, qrDataUrl, connection: "connecting", lastError: null });
   }
 
+  /**
+   * Enter the "connecting" state and drop any stale QR. Called at the start of a
+   * manual relink so the UI immediately shows progress (and never a dead QR from
+   * a previous session) while a fresh QR is generated.
+   */
+  setConnecting(): void {
+    this.update({ connection: "connecting", qr: null, qrDataUrl: null, lastError: null });
+  }
+
   setOpen(me: { id: string | null; name: string | null }): void {
     this.update({ connection: "open", qr: null, qrDataUrl: null, lastError: null, me });
   }

@@ -49,6 +49,10 @@ services:
       GATEWAY_PORT: 3000
       WA_SESSION_DIR: /app/.wa-session
       WA_MEDIA_DIR: /app/.wa-media
+      # Auto-migración: al arrancar, el gateway aplica el init.sql (idempotente) para
+      # que un volumen postgres_data YA existente reciba columnas nuevas de cada deploy.
+      # Sin esto, Postgres solo corre init.sql en volumen nuevo y las migraciones se pierden.
+      DB_INIT_SQL: /app/db/init.sql
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,6 +63,8 @@ services:
     volumes:
       - wa_session:/app/.wa-session
       - wa_media:/app/.wa-media
+      # Solo lectura: el schema para la auto-migración de arranque (DB_INIT_SQL).
+      - ./db/init.sql:/app/db/init.sql:ro
     restart: unless-stopped
 
   frontend:

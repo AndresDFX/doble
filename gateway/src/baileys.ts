@@ -48,6 +48,10 @@ let clearSession: (() => Promise<void>) | null = null;
 export async function relinkWhatsApp(): Promise<void> {
   logger.warn("Manual relink requested");
   activity.push({ kind: "wa", level: "warn", message: "Revinculación solicitada — generando QR nuevo…" });
+  // Immediately reflect "connecting" in the UI and drop any stale QR, so the
+  // dashboard shows progress instead of a dead code while we regenerate.
+  waStatus.setConnecting();
+  bus.publish({ type: "wa-status", payload: waStatus.get() });
   // Invalidate the live socket so its close event won't fire its own reconnect
   // and race this restart.
   connectionGen++;
