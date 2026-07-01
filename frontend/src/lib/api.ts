@@ -180,10 +180,15 @@ async function http<T>(
   url: string,
   init: RequestInit = {}
 ): Promise<T> {
-  const res = await fetch(url, {
-    headers: { "content-type": "application/json", ...(init.headers ?? {}) },
-    ...init,
-  });
+  // Only advertise a JSON body when we actually send one. A bodyless POST/DELETE
+  // (e.g. /api/wa/relink) with content-type: application/json makes Fastify 400
+  // ("Body cannot be empty when content-type is set to 'application/json'").
+  const headers: Record<string, string> = { ...(init.headers as Record<string, string> | undefined) };
+  const hasContentType = Object.keys(headers).some((k) => k.toLowerCase() === "content-type");
+  if (init.body != null && !hasContentType) {
+    headers["content-type"] = "application/json";
+  }
+  const res = await fetch(url, { ...init, headers });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`${res.status}: ${text || res.statusText}`);

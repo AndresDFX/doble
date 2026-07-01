@@ -19,6 +19,29 @@ import { registerBasicAuth, registerFrontend } from "./hosting.js";
 export async function startApiServer(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
 
+  // Tolerate an EMPTY body on application/json requests. The dashboard sends
+  // several bodyless POST/DELETE calls (e.g. POST /api/wa/relink) with a JSON
+  // content-type; Fastify's default parser 400s those ("Body cannot be empty
+  // when content-type is set to 'application/json'"). Treat empty as no body.
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "string" },
+    (_req, body, done) => {
+      const text = (body as string).trim();
+      if (text.length === 0) {
+        done(null, undefined);
+        return;
+      }
+      try {
+        done(null, JSON.parse(text));
+      } catch {
+        const err = new Error("Invalid JSON body") as Error & { statusCode?: number };
+        err.statusCode = 400;
+        done(err, undefined);
+      }
+    }
+  );
+
   await app.register(cors, { origin: true, credentials: true });
   registerBasicAuth(app);
   await app.register(multipart, {

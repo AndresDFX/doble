@@ -9,7 +9,8 @@
  * Both return the same shape Baileys expects (`{ state, saveCreds }`) plus a
  * `clearAll()` that wipes the persisted session (called on loggedOut).
  */
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, readdir } from "node:fs/promises";
+import { join } from "node:path";
 import { useMultiFileAuthState, type AuthenticationState } from "@whiskeysockets/baileys";
 import { config } from "../config.js";
 import { useDynamoAuthState } from "./dynamo-auth.js";
@@ -38,6 +39,15 @@ export async function getAuthState(opts: {
   return {
     state,
     saveCreds,
-    clearAll: () => rm(opts.sessionDir, { recursive: true, force: true }),
+    // Empty the session dir's CONTENTS rather than removing the directory: in
+    // docker-compose the session lives on a mounted volume, and `rm` on the
+    // mountpoint itself throws EBUSY — leaving the dead creds in place so a
+    // relink could never get a fresh QR. Removing the entries avoids that.
+    clearAll: async () => {
+      const entries = await readdir(opts.sessionDir).catch(() => [] as string[]);
+      await Promise.all(
+        entries.map((name) => rm(join(opts.sessionDir, name), { recursive: true, force: true }))
+      );
+    },
   };
 }
