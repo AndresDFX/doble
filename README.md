@@ -336,6 +336,7 @@ Cercano — sin romper las reglas de v1 (sin auth/Stripe/multi-tenancy):
 3. **Rotar `GEMINI_API_KEY`**: la clave actual vivió en `.env` local; rotarla en aistudio.google.com por higiene (no se publicó — está en `.gitignore`).
 4. **(Opcional) Extender Clean Architecture al servicio `ai/`** (Python): separar dominio (RAG/retrieval) de adapters (Gemini, pgvector).
 5. **(Entorno) Fuente del terminal**: fijar *MesloLGM Nerd Font* para ver los íconos del prompt (Oh My Posh ya quedó activo en el perfil de PowerShell).
+6. **Proactivo a escala — anti-baneo** (cuando se active proactivo en muchos chats): **quiet hours** (franja horaria configurable, p. ej. 8am–10pm en la zona del dueño; no reengancha de madrugada), **cap diario global** de proactivos (tope de mensajes/día sumando todos los chats) y, opcional, **espaciado** entre chats en el mismo tick. Es la traducción a Doble del "fraccionado con jitter" de un broadcaster (Doble no difunde a listas, así que NO se implementa eso). Enganche en `ProactiveMessenger` + un par de valores de config + un contador diario. Hoy no urge: el cap por chat (1 reenganche y espera) y la cadencia humana 2–8s ya cubren el uso normal.
 
 Más adelante (v2): ver *Diferido a v2+*. La aprobación humana ya existe vía borradores + avisos por WhatsApp (etiqueta `Owner`); el siguiente salto natural sería notificaciones por Telegram o un scheduler horario.
 
