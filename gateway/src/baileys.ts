@@ -130,7 +130,13 @@ export async function startBaileys(): Promise<void> {
       const code =
         (lastDisconnect?.error as Boom)?.output?.statusCode ?? 0;
       const loggedOut = code === DisconnectReason.loggedOut;
-      logger.warn({ code, loggedOut }, "WhatsApp connection closed");
+      // 440 = another instance took this session (Render's zero-downtime deploy
+      // overlaps old+new instances; or a local gateway/link). Reconnecting here
+      // starts a 440 war between the two until WhatsApp invalidates the session
+      // (loggedOut → re-scan). Like telegram-sender: YIELD — the last host to
+      // connect wins, this one goes quiet. The winner keeps the session alive.
+      const replaced = code === DisconnectReason.connectionReplaced;
+      logger.warn({ code, loggedOut, replaced }, "WhatsApp connection closed");
       waStatus.setClose(lastDisconnect?.error?.message ?? `code ${code}`);
       bus.publish({ type: "wa-status", payload: waStatus.get() });
       activity.push({
@@ -138,9 +144,12 @@ export async function startBaileys(): Promise<void> {
         level: "warn",
         message: loggedOut
           ? `Sesión cerrada (code ${code}). Revinculando: se generará un QR nuevo…`
-          : `Conexión cerrada (code ${code}). Reintentando…`,
+          : replaced
+            ? `Otra instancia tomó la sesión (code 440) — esta cede sin pelear.`
+            : `Conexión cerrada (code ${code}). Reintentando…`,
         meta: { code, error: lastDisconnect?.error?.message },
       });
+      if (replaced) return; // yield: no reconnect, no session clearing
       // Logged out (device unlinked / session invalidated): the stored creds are
       // dead. Clear them — clearAll handles BOTH the file store and the DynamoDB
       // store — so the restart boots WITHOUT creds and emits a fresh QR. Without
