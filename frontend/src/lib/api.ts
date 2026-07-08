@@ -276,6 +276,11 @@ export const api = {
       http<{ ok: true }>(`/api/labels/${encodeURIComponent(label)}`, {
         method: "DELETE",
       }),
+    base: () => http<Omit<Label, "chats">[]>("/api/labels/base"),
+    reset: (label: string) =>
+      http<{ ok: true }>(`/api/labels/${encodeURIComponent(label)}/reset`, {
+        method: "POST",
+      }),
   },
   activity: {
     list: (limit = 200, kind?: ActivityKind) => {

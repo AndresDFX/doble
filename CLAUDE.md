@@ -96,7 +96,7 @@ Activación de venv en PowerShell: `.\.venv\Scripts\Activate.ps1` (NO `activate`
 - **Postgres**: una sola DB para todo (chats, messages, embeddings, drafts, agent_state). No introducir vector DB aparte.
 - **Embeddings**: dimensión fija 1536, normalización L2 obligatoria (gemini-embedding-001 lo requiere al truncar desde 3072).
 - **Etiquetas WhatsApp** se leen automáticamente vía `labels.edit` + `labels.association.update`. Mapping de nombres normalizado en `gateway/src/scripts/init-history.ts` (familia/family → familia, etc).
-- **Prompts por etiqueta** viven en la tabla `labels_config` (no hardcodeados). Modificar SQL, no código, para tunear tono o `temperature`.
+- **Prompts por etiqueta** viven en la tabla `labels_config` (editables desde la pestaña Etiquetas). Los **prompts base canónicos** están en código: [gateway/src/domain/base-prompts.ts](gateway/src/domain/base-prompts.ts) (mantener en sync con los VALUES de `db/init.sql`). `GET /api/labels/base` los lista y `POST /api/labels/:label/reset` restaura una etiqueta a su base (botón "Base" en la UI) — necesario porque `init.sql` usa `ON CONFLICT DO NOTHING` y nunca actualiza prompts existentes.
 
 ## Reglas críticas (no romper)
 
@@ -144,7 +144,9 @@ Pseudo-chat reservado con `chat_id = '__owner__'` y `label = '__owner__'`, gesti
 - Compose stack: [docker-compose.yml](docker-compose.yml)
 - Dockerfiles: [gateway/Dockerfile](gateway/Dockerfile), [ai/Dockerfile](ai/Dockerfile), [frontend/Dockerfile](frontend/Dockerfile) + [frontend/nginx.conf](frontend/nginx.conf)
 - Sesión Baileys (disco vs DynamoDB): [gateway/src/infrastructure/auth-state.ts](gateway/src/infrastructure/auth-state.ts) + [dynamo-auth.ts](gateway/src/infrastructure/dynamo-auth.ts)
-- Identificación de contactos (nombre desde agenda/pushName, precedencia manual>contact>push): [gateway/src/infrastructure/contact-sync.ts](gateway/src/infrastructure/contact-sync.ts) → `chats.name` + columna `name_source`. Solo nombra conversaciones existentes (no inserta la agenda entera).
+- Identificación de contactos (nombre desde agenda/pushName, precedencia manual>contact>push): [gateway/src/infrastructure/contact-sync.ts](gateway/src/infrastructure/contact-sync.ts) → `chats.name` + columna `name_source`. Solo nombra conversaciones existentes (no inserta la agenda entera). **Por número:** la búsqueda de chats (y el bulk) matchea también `chats.phone` con los dígitos del query, y un nombre aprendido en un JID `@s.whatsapp.net` se propaga a los chats que compartan el mismo teléfono (p. ej. su `@lid`) — ver `recordContactNames` en [repositories.ts](gateway/src/infrastructure/repositories.ts).
+- Prompts base por etiqueta (módulo + restaurar): [gateway/src/domain/base-prompts.ts](gateway/src/domain/base-prompts.ts) + `GET /api/labels/base` / `POST /api/labels/:label/reset`
+- Plan de pruebas: [docs/TEST-PLAN.md](docs/TEST-PLAN.md)
 - Basic Auth + serving del SPA (Render): [gateway/src/api/hosting.ts](gateway/src/api/hosting.ts)
 - Despliegue en Render (free tier, un solo web service — **vivo en https://doble.onrender.com**): [render.yaml](render.yaml) + [Dockerfile.render](Dockerfile.render) + [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md). Postgres en Supabase (Session pooler :5432); el gateway activa TLS según `sslmode` ([db.ts](gateway/src/db.ts)).
 - Vinculación local de WhatsApp para Render (`npm run link`): [gateway/src/scripts/link.ts](gateway/src/scripts/link.ts)

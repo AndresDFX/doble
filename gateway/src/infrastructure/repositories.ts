@@ -161,9 +161,18 @@ export class PostgresChatRepository implements ChatRepository {
       values.push(filter.label);
     }
     if (filter.q) {
-      where.push(`(c.name ILIKE $${i} OR c.id ILIKE $${i})`);
-      values.push(`%${filter.q}%`);
-      i++;
+      // Contact identification by number: besides name/id, a query with digits
+      // also matches the phone column ("+57 300 123" finds phone 573001234567).
+      const digits = filter.q.replace(/\D/g, "");
+      if (digits) {
+        where.push(`(c.name ILIKE $${i} OR c.id ILIKE $${i} OR c.phone LIKE $${i + 1})`);
+        values.push(`%${filter.q}%`, `%${digits}%`);
+        i += 2;
+      } else {
+        where.push(`(c.name ILIKE $${i} OR c.id ILIKE $${i})`);
+        values.push(`%${filter.q}%`);
+        i++;
+      }
     }
     values.push(filter.limit ?? 100, filter.offset ?? 0);
     const sql = `
@@ -277,7 +286,21 @@ export class PostgresChatRepository implements ChatRepository {
          AND ${vPrio} >= ${cPrio}`,
       values
     );
-    return rowCount ?? 0;
+
+    // Identification by NUMBER: a name learned for a @s.whatsapp.net JID (whose
+    // user part IS the phone) also names any other chat row sharing that phone —
+    // e.g. the @lid privacy-JID of the same person. Same precedence rules.
+    const { rowCount: byPhone } = await pool.query(
+      `UPDATE chats SET name = v.name, name_source = v.name_source
+       FROM (VALUES ${tuples.join(", ")}) AS v(id, name, name_source)
+       WHERE v.id LIKE '%@s.whatsapp.net'
+         AND chats.id <> v.id
+         AND chats.phone = split_part(split_part(v.id, '@', 1), ':', 1)
+         AND COALESCE(v.name, '') <> ''
+         AND ${vPrio} >= ${cPrio}`,
+      values
+    );
+    return (rowCount ?? 0) + (byPhone ?? 0);
   }
 
   async countNamed(): Promise<number> {
@@ -298,9 +321,17 @@ export class PostgresChatRepository implements ChatRepository {
       values.push(filter.label);
     }
     if (filter.q) {
-      where.push(`(name ILIKE $${i} OR id ILIKE $${i})`);
-      values.push(`%${filter.q}%`);
-      i++;
+      // Same phone-aware matching as list(): a digits query also hits `phone`.
+      const digits = filter.q.replace(/\D/g, "");
+      if (digits) {
+        where.push(`(name ILIKE $${i} OR id ILIKE $${i} OR phone LIKE $${i + 1})`);
+        values.push(`%${filter.q}%`, `%${digits}%`);
+        i += 2;
+      } else {
+        where.push(`(name ILIKE $${i} OR id ILIKE $${i})`);
+        values.push(`%${filter.q}%`);
+        i++;
+      }
     }
     const { rowCount } = await pool.query(
       `UPDATE chats SET agent_enabled = $2 WHERE ${where.join(" AND ")}`,

@@ -18,6 +18,22 @@ type LabelPatch = {
 export async function registerLabelRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/labels", async () => container.labels.list());
 
+  // Canonical base prompts per label type (code-defined; see domain/base-prompts.ts).
+  app.get("/api/labels/base", async () => container.labels.listBase());
+
+  // Restore a label to its base config (only labels that have a base).
+  app.post<{ Params: { label: string } }>(
+    "/api/labels/:label/reset",
+    async (req, reply) => {
+      const ok = await container.labels.resetToBase(req.params.label);
+      if (!ok) {
+        reply.status(404);
+        return { error: "no base prompt for that label" };
+      }
+      return { ok: true };
+    }
+  );
+
   app.post<{ Body: LabelBody }>("/api/labels", async (req, reply) => {
     const { label, prompt_template, temperature, max_distance, examples } = req.body;
     if (!label || !prompt_template) {

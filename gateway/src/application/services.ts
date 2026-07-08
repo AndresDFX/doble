@@ -42,6 +42,7 @@ import type {
 } from "../domain/ports.js";
 import { deliverReply, type ReplyDeliveryDeps } from "./reply-delivery.js";
 import { clampMinutes, nextProactiveAt } from "../domain/proactive-policy.js";
+import { BASE_PROMPTS, getBasePrompt } from "../domain/base-prompts.js";
 
 // --- Agent state ------------------------------------------------------------
 
@@ -175,6 +176,17 @@ export class LabelService {
   }
   patch(label: string, patch: LabelPatch): Promise<void> {
     return this.labels.patch(label, patch);
+  }
+  /** The canonical base prompt configs (code-defined, per label type). */
+  listBase(): readonly Label[] {
+    return BASE_PROMPTS;
+  }
+  /** Restore a label to its base config. False when the label has no base (custom). */
+  async resetToBase(label: string): Promise<boolean> {
+    const base = getBasePrompt(label);
+    if (!base) return false;
+    await this.labels.upsert(base);
+    return true;
   }
   async remove(label: string): Promise<DeleteLabelResult> {
     if (label === "default") {

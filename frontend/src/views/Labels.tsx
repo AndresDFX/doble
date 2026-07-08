@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Label } from "../lib/api";
 import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Input, Textarea } from "../components/ui";
 import { toast } from "sonner";
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 
 export function Labels() {
   const qc = useQueryClient();
   const labelsQ = useQuery({ queryKey: ["labels"], queryFn: api.labels.list });
+  const baseQ = useQuery({ queryKey: ["labels-base"], queryFn: api.labels.base });
   const [creating, setCreating] = useState(false);
 
   const upsert = useMutation({
@@ -41,6 +42,17 @@ export function Labels() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const reset = useMutation({
+    mutationFn: api.labels.reset,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["labels"] });
+      toast.success("Prompt restaurado al base");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const baseLabels = new Set(baseQ.data?.map((b) => b.label) ?? []);
+
   return (
     <div className="space-y-4">
       <GlobalPromptCard />
@@ -61,9 +73,16 @@ export function Labels() {
 
       {labelsQ.data?.map((l) => (
         <LabelEditor
-          key={l.label}
+          // Remount when the SAVED config changes (e.g. after "Restaurar base"),
+          // so the local editing state re-seeds from the fresh values.
+          key={`${l.label}:${l.temperature}:${l.max_distance}:${l.prompt_template.length}:${l.examples?.length ?? 0}`}
           label={l}
+          hasBase={baseLabels.has(l.label)}
           onSave={(body) => patch.mutate({ label: l.label, body })}
+          onReset={() => {
+            if (confirm(`¿Restaurar "${l.label}" al prompt base? Se pierde lo editado.`))
+              reset.mutate(l.label);
+          }}
           onDelete={() => {
             if (confirm(`¿Eliminar etiqueta "${l.label}"?`)) remove.mutate(l.label);
           }}
@@ -211,16 +230,20 @@ function NewLabelForm({
 
 function LabelEditor({
   label,
+  hasBase,
   onSave,
+  onReset,
   onDelete,
 }: {
   label: Label;
+  hasBase: boolean;
   onSave: (body: {
     prompt_template?: string;
     temperature?: number;
     max_distance?: number;
     examples?: string | null;
   }) => void;
+  onReset: () => void;
   onDelete: () => void;
 }) {
   const [tpl, setTpl] = useState(label.prompt_template);
@@ -240,9 +263,16 @@ function LabelEditor({
           <CardTitle className="text-base">{label.label}</CardTitle>
           <Badge tone="blue">{label.chats} chats</Badge>
         </div>
-        <Button size="sm" variant="ghost" onClick={onDelete} disabled={label.label === "default"}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {hasBase ? (
+            <Button size="sm" variant="ghost" onClick={onReset} title="Restaurar al prompt base">
+              <RotateCcw className="h-3.5 w-3.5" /> Base
+            </Button>
+          ) : null}
+          <Button size="sm" variant="ghost" onClick={onDelete} disabled={label.label === "default"}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </CardHeader>
       <CardBody className="space-y-2">
         <Textarea value={tpl} onChange={(e) => setTpl(e.target.value)} rows={4} />

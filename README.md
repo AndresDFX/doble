@@ -250,6 +250,8 @@ Filtra por categoría con los chips superiores o busca por texto libre. Los even
 
 El sistema lee las **etiquetas nativas de WhatsApp** (Familia, Trabajo, Amigos, Amor) y las mapea a templates de prompt. Cada etiqueta tiene su propia `temperature`, una **plantilla de tono con límites por relación**, un **umbral de relevancia del RAG (`max_distance`)** y **ejemplos few-shot (`examples`)** — todo **editable desde la pestaña Etiquetas del dashboard** (sin tocar SQL), o directo en `db/init.sql` / `labels_config`. La `temperature` además se **ajusta dinámicamente** por mensaje: baja para preguntas factuales (más precisa), se mantiene para charla social (más natural).
 
+Los **prompts base** canónicos por tipo de etiqueta viven en código ([gateway/src/domain/base-prompts.ts](gateway/src/domain/base-prompts.ts)): si dañas un prompt editándolo, el botón **"Base"** de la pestaña Etiquetas lo restaura al canónico (`POST /api/labels/:label/reset`). Esto también sirve para traer los prompts mejorados a una DB existente (el seed de `init.sql` no actualiza filas ya creadas).
+
 Para personalizar el prompt de una etiqueta por SQL (alternativa a la UI):
 
 ```sql
@@ -275,6 +277,8 @@ Imita el largo del contacto. Para saludos o confirmaciones devuelve cosas como "
 Solo se dirige al contacto por su nombre si el chat tiene **nombre asignado**. Si no lo tiene, no usa ninguno; nunca inventa ni reutiliza nombres que aparezcan en los ejemplos de estilo o en el historial.
 
 Ese nombre se **identifica automáticamente** desde WhatsApp (igual que en el proyecto de referencia): el gateway escucha los eventos de contactos (`contacts.upsert`/`update`, `messaging-history.set`) y el `pushName` de los mensajes, y rellena el nombre del chat. Precedencia, de mayor a menor: **manual** (lo que edites en la pestaña Chats) → **agenda** (nombre guardado en tu WhatsApp) → **pushName** (nombre auto-reportado del contacto). Una fuente nunca pisa a otra de mayor precedencia, así que tu edición manual siempre gana. Los nombres solo se aplican a **conversaciones existentes** (no llena la lista con toda tu agenda), y si hay pocos nombres el gateway re-sincroniza la libreta sin re-vincular.
+
+La identificación también funciona **por número**: la búsqueda de la pestaña Chats (y las acciones masivas) matchean el **teléfono** además del nombre/id — puedes buscar `+57 300 123 4567` con espacios y `+` — y un nombre aprendido para un JID normal se **propaga a los chats que comparten el mismo número** (p. ej. el JID de privacidad `@lid` de la misma persona), siempre respetando la precedencia.
 
 ### Cuando no sabe, se abstiene (no alucina)
 Si responder requiere un dato concreto que **no** está en el contexto ni en tus notas, el agente no inventa: el servicio `ai` devuelve `status = "need_info"` y, en vez de mandar algo inventado, se crea un **borrador "falta contexto"** en el dashboard indicando qué dato falta. El modelo decide entre `answer` y `need_info` vía salida estructurada `{status, reply, missing}`. Tampoco **mezcla contextos**: si tiene un dato de otro tema (otra hora, otro plan), no lo sustituye por la respuesta — se abstiene.
@@ -308,6 +312,8 @@ Config (env del gateway, opcionales): `PROACTIVE_SCHEDULER` (`on`/`off`, default
 > ⚠️ **Cuidado anti-baneo**: enviar mensajes no solicitados es más arriesgado que solo responder. Usa rangos amplios, actívalo en pocos chats y mantén `draft_mode = on` mientras calibras. (Pendiente para uso a escala: ventana horaria + cap diario de proactivos.)
 
 ## Verificación end-to-end
+
+> 📋 **Plan de pruebas completo** (10 áreas, casos con pasos y resultado esperado, local y producción): [docs/TEST-PLAN.md](docs/TEST-PLAN.md). Lo de abajo es el smoke rápido.
 
 1. `docker compose up -d postgres` y verificar healthy
 2. `uvicorn` corriendo y `curl localhost:8000/health` devuelve `{"status":"ok"}`
