@@ -31,7 +31,7 @@ const TABS = [
   { id: "batch", label: "Batch", icon: Send, View: Batch },
   { id: "rag", label: "RAG", icon: Database, View: Rag },
   { id: "notes", label: "Notas", icon: Mic, View: Notes },
-  { id: "labels", label: "Etiquetas", icon: Tag, View: Labels },
+  { id: "labels", label: "Prompts", icon: Tag, View: Labels },
   { id: "activity", label: "Actividad", icon: ActivityIcon, View: ActivityView },
 ] as const;
 

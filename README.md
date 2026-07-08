@@ -193,7 +193,9 @@ Después de esto, ya puedes arrancar el gateway con `npm run dev`.
 
 Para no tener que escribir mensajes uno a uno desde WhatsApp A hacia el agente en B, abre el dashboard y entra a la pestaña **Batch**:
 
-1. **Sender card** (izquierda): da click en *Conectar* → aparece un QR. Escanéalo con tu **WhatsApp principal (A)**. La sesión queda persistida en el volumen `wa_session` del contenedor (o en `gateway/.wa-sender-session/` en dev local).
+> **¿Por qué esta pestaña pide OTRO QR?** La conexión del Dashboard es **B** (el agente). Batch dispara mensajes **desde tu WhatsApp principal (A) hacia B** para que el agente responda como si le escribiera un contacto real — B no puede probarse a sí mismo (sus propios mensajes son `from_me` y el pipeline nunca los responde). El QR de A se escanea **una sola vez**: la sesión persiste igual que la de B (en producción, en DynamoDB bajo el prefijo `sender::`; en local, en `.wa-sender-session/`).
+
+1. **Sender card** (izquierda): da click en *Conectar* → aparece un QR. Escanéalo con tu **WhatsApp principal (A)**. La sesión queda persistida (ver nota de arriba) y sobrevive reinicios.
 2. **Disparar lote** (centro): escribe el JID o número del WhatsApp destino (B), marca los temas que quieras (familia / trabajo / amigos / amor / propio / salud / reunion), opcionalmente fija un máximo por tema y los delays mínimo/máximo entre mensajes. Activa "Vista previa" para ver el plan sin enviar.
 3. **Progreso** (panel inferior): barra en vivo, contador enviados/fallidos, botón para abortar. El detalle por mensaje sale en la pestaña **Actividad** con el filtro `Batch`.
 
@@ -279,6 +281,16 @@ Solo se dirige al contacto por su nombre si el chat tiene **nombre asignado**. S
 Ese nombre se **identifica automáticamente** desde WhatsApp (igual que en el proyecto de referencia): el gateway escucha los eventos de contactos (`contacts.upsert`/`update`, `messaging-history.set`) y el `pushName` de los mensajes, y rellena el nombre del chat. Precedencia, de mayor a menor: **manual** (lo que edites en la pestaña Chats) → **agenda** (nombre guardado en tu WhatsApp) → **pushName** (nombre auto-reportado del contacto). Una fuente nunca pisa a otra de mayor precedencia, así que tu edición manual siempre gana. Los nombres solo se aplican a **conversaciones existentes** (no llena la lista con toda tu agenda), y si hay pocos nombres el gateway re-sincroniza la libreta sin re-vincular.
 
 La identificación también funciona **por número**: la búsqueda de la pestaña Chats (y las acciones masivas) matchean el **teléfono** además del nombre/id — puedes buscar `+57 300 123 4567` con espacios y `+` — y un nombre aprendido para un JID normal se **propaga a los chats que comparten el mismo número** (p. ej. el JID de privacidad `@lid` de la misma persona), siempre respetando la precedencia.
+
+Cada chat guarda además la **cuenta del agente con la que se sincronizó** (`wa_account`, se fija con la primera actividad y no se pisa): si algún día re-vinculas el agente con otro número, los chats del número anterior aparecen marcados con un badge "otra cuenta" en la lista.
+
+### Listas automáticas: selección y exclusión por nombre
+
+En la pestaña **Chats** puedes armar "listas" de atención del agente al estilo del proyecto `telegram-sender`:
+
+- **Checkboxes + Incluir/Excluir marcados**: marca chats sueltos (o "Marcar todos" los visibles del filtro) y actívales/desactívales el agente de una.
+- **Acciones por filtro**: sin marcar nada, los botones aplican a todo lo que coincida con la búsqueda + etiqueta actual.
+- **⛔ Auto-excluir por patrón de nombre** (card superior): un patrón por línea; todo chat cuyo nombre **contenga** el patrón (sin distinguir mayúsculas) queda con el agente desactivado — al guardar y automáticamente cuando la identificación de contactos va nombrando chats nuevos. Ej.: `FAM`, `#`, `Jefe`. Es de una sola vía (nunca re-activa solo); para volver a incluir usa el switch o los checkboxes.
 
 ### Cuando no sabe, se abstiene (no alucina)
 Si responder requiere un dato concreto que **no** está en el contexto ni en tus notas, el agente no inventa: el servicio `ai` devuelve `status = "need_info"` y, en vez de mandar algo inventado, se crea un **borrador "falta contexto"** en el dashboard indicando qué dato falta. El modelo decide entre `answer` y `need_info` vía salida estructurada `{status, reply, missing}`. Tampoco **mezcla contextos**: si tiene un dato de otro tema (otra hora, otro plan), no lo sustituye por la respuesta — se abstiene.

@@ -3,6 +3,10 @@ export type AgentState = {
   draft_mode: boolean;
   user_name: string;
   global_prompt: string;
+  /** Auto-exclusión por nombre: un patrón por línea ("contiene", sin mayúsculas). */
+  exclude_patterns: string;
+  /** Solo en la respuesta del PATCH cuando se guardan patrones: chats excluidos ahora. */
+  excluded?: number;
 };
 
 export type WaStatus = {
@@ -28,6 +32,8 @@ export type Chat = {
   label: string | null;
   agent_enabled: boolean;
   phone: string | null;
+  /** Cuenta del agente (dígitos) con la que este chat se sincronizó originalmente. */
+  wa_account: string | null;
   proactive_enabled: boolean;
   proactive_min_minutes: number;
   proactive_max_minutes: number;
@@ -229,6 +235,11 @@ export const api = {
       ),
     bulkAgent: (body: { q?: string; label?: string; agent_enabled: boolean }) =>
       http<{ updated: number }>("/api/chats/bulk-agent", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    bulkAgentIds: (body: { ids: string[]; agent_enabled: boolean }) =>
+      http<{ updated: number }>("/api/chats/bulk-agent-ids", {
         method: "POST",
         body: JSON.stringify(body),
       }),

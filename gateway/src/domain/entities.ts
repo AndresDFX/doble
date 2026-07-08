@@ -37,12 +37,20 @@ export type AgentState = {
   user_name: string;
   /** Owner instruction injected into every reply, on top of the per-label template. */
   global_prompt: string;
+  /**
+   * Auto-exclusion by name (one pattern per line, case-insensitive "contains").
+   * Chats whose name matches any pattern get the agent disabled automatically —
+   * on save and as contact names sync in. Mirrors telegram-sender's
+   * "auto-excluir por patrón de nombre". Never re-enables by itself.
+   */
+  exclude_patterns: string;
 };
 export type AgentStatePatch = {
   enabled?: boolean;
   draft_mode?: boolean;
   user_name?: string;
   global_prompt?: string;
+  exclude_patterns?: string;
 };
 
 // --- Chats -------------------------------------------------------------------
@@ -53,6 +61,12 @@ export type Chat = {
   agent_enabled: boolean;
   /** Contact phone (digits only, no '+'). Null when unknown (e.g. @lid not yet shared). */
   phone: string | null;
+  /**
+   * Agent account (digits) this chat was synced under — set once, on first
+   * activity, and never overwritten. Distinguishes chats belonging to an older
+   * linked number if the agent is ever re-paired with a different one.
+   */
+  wa_account: string | null;
   /**
    * Proactive messaging: when on, the scheduler periodically writes an
    * unprompted message to this chat (in the owner's voice, from the latest
@@ -75,6 +89,8 @@ export type ChatUpsert = {
   name?: string | null;
   label?: string | null;
   phone?: string | null;
+  /** Agent account (digits) seen when this chat had activity; only the first value sticks. */
+  wa_account?: string | null;
 };
 export type ChatPatch = {
   label?: string | null;
@@ -134,6 +150,8 @@ export type IncomingMessage = {
   mediaPath: string | null;
   /** Contact phone (digits only) derived from the JID or captured from key.senderPn. */
   phone: string | null;
+  /** Agent account (digits) that received this message — ties the chat to the synced number. */
+  account: string | null;
 };
 
 // --- Drafts ------------------------------------------------------------------

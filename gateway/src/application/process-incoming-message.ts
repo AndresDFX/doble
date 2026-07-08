@@ -53,7 +53,12 @@ export class ProcessIncomingMessage {
   ): Promise<void> {
     const d = this.deps;
 
-    await d.chats.upsert({ id: msg.chat_id, phone: msg.phone ?? undefined });
+    await d.chats.upsert({
+      id: msg.chat_id,
+      phone: msg.phone ?? undefined,
+      // First write wins in the repo: ties the chat to the number it synced under.
+      wa_account: msg.account ?? undefined,
+    });
     await d.messages.insert({
       id: msg.id,
       chat_id: msg.chat_id,

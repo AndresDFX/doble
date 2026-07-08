@@ -50,7 +50,7 @@ const iso = (v: Date | string | null): string | null =>
 export class PostgresAgentStateRepository implements AgentStateRepository {
   async get(): Promise<AgentState> {
     const { rows } = await pool.query<AgentState>(
-      "SELECT enabled, draft_mode, user_name, global_prompt FROM agent_state WHERE id = 1"
+      "SELECT enabled, draft_mode, user_name, global_prompt, exclude_patterns FROM agent_state WHERE id = 1"
     );
     if (rows.length === 0) {
       throw new Error("agent_state row missing — did db/init.sql run?");
@@ -78,6 +78,10 @@ export class PostgresAgentStateRepository implements AgentStateRepository {
       sets.push(`global_prompt = $${i++}`);
       values.push(patch.global_prompt);
     }
+    if (patch.exclude_patterns !== undefined) {
+      sets.push(`exclude_patterns = $${i++}`);
+      values.push(patch.exclude_patterns);
+    }
     if (sets.length > 0) {
       await pool.query(`UPDATE agent_state SET ${sets.join(", ")} WHERE id = 1`, values);
     }
@@ -89,7 +93,7 @@ export class PostgresAgentStateRepository implements AgentStateRepository {
 
 // Columns shared by every chat SELECT — keeps the proactive fields in one place.
 const CHAT_COLS =
-  "c.id, c.name, c.label, c.agent_enabled, c.phone, " +
+  "c.id, c.name, c.label, c.agent_enabled, c.phone, c.wa_account, " +
   "c.proactive_enabled, c.proactive_min_minutes, c.proactive_max_minutes, " +
   "c.proactive_next_ts, c.proactive_unanswered";
 
@@ -99,6 +103,7 @@ type ChatRow = {
   label: string | null;
   agent_enabled: boolean;
   phone: string | null;
+  wa_account: string | null;
   proactive_enabled: boolean;
   proactive_min_minutes: number;
   proactive_max_minutes: number;
@@ -117,6 +122,7 @@ const toChat = (r: ChatRow): Chat => ({
   label: r.label,
   agent_enabled: r.agent_enabled,
   phone: r.phone,
+  wa_account: r.wa_account,
   proactive_enabled: r.proactive_enabled,
   proactive_min_minutes: r.proactive_min_minutes,
   proactive_max_minutes: r.proactive_max_minutes,
@@ -127,7 +133,7 @@ const toChat = (r: ChatRow): Chat => ({
 export class PostgresChatRepository implements ChatRepository {
   async get(id: string): Promise<Chat | null> {
     const { rows } = await pool.query<ChatRow>(
-      `SELECT id, name, label, agent_enabled, phone,
+      `SELECT id, name, label, agent_enabled, phone, wa_account,
               proactive_enabled, proactive_min_minutes, proactive_max_minutes,
               proactive_next_ts, proactive_unanswered
        FROM chats WHERE id = $1`,
@@ -194,12 +200,14 @@ export class PostgresChatRepository implements ChatRepository {
 
   async upsert(chat: ChatUpsert): Promise<void> {
     await pool.query(
-      `INSERT INTO chats (id, name, label, phone) VALUES ($1, $2, $3, $4)
+      `INSERT INTO chats (id, name, label, phone, wa_account) VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (id) DO UPDATE SET
          name = COALESCE(EXCLUDED.name, chats.name),
          label = COALESCE(EXCLUDED.label, chats.label),
-         phone = COALESCE(chats.phone, EXCLUDED.phone)`,
-      [chat.id, chat.name ?? null, chat.label ?? null, chat.phone ?? null]
+         phone = COALESCE(chats.phone, EXCLUDED.phone),
+         -- First write wins: the account the chat was synced under originally.
+         wa_account = COALESCE(chats.wa_account, EXCLUDED.wa_account)`,
+      [chat.id, chat.name ?? null, chat.label ?? null, chat.phone ?? null, chat.wa_account ?? null]
     );
   }
 
@@ -336,6 +344,31 @@ export class PostgresChatRepository implements ChatRepository {
     const { rowCount } = await pool.query(
       `UPDATE chats SET agent_enabled = $2 WHERE ${where.join(" AND ")}`,
       values
+    );
+    return rowCount ?? 0;
+  }
+
+  async bulkSetAgentEnabledByIds(ids: string[], enabled: boolean): Promise<number> {
+    const clean = ids.filter((id) => id && id !== OWNER_CHAT_ID);
+    if (clean.length === 0) return 0;
+    const { rowCount } = await pool.query(
+      `UPDATE chats SET agent_enabled = $1 WHERE id = ANY($2::text[])`,
+      [enabled, clean]
+    );
+    return rowCount ?? 0;
+  }
+
+  async disableByNamePatterns(patterns: string[]): Promise<number> {
+    // Auto-exclusion by name: disable the agent for chats whose name CONTAINS any
+    // pattern (case-insensitive). One-way: it never re-enables (include back by
+    // hand or with the bulk actions). Owner pseudo-chat excluded.
+    const clean = patterns.map((p) => p.trim()).filter(Boolean);
+    if (clean.length === 0) return 0;
+    const likes = clean.map((p) => `%${p}%`);
+    const { rowCount } = await pool.query(
+      `UPDATE chats SET agent_enabled = FALSE
+       WHERE agent_enabled AND id <> $1 AND name ILIKE ANY($2::text[])`,
+      [OWNER_CHAT_ID, likes]
     );
     return rowCount ?? 0;
   }

@@ -107,6 +107,22 @@ export class ChatService {
   bulkSetAgent(filter: ChatBulkFilter, enabled: boolean): Promise<number> {
     return this.chats.bulkSetAgentEnabled(filter, enabled);
   }
+  /** Bulk enable/disable the agent for an explicit selection (checkboxes). */
+  bulkSetAgentByIds(ids: string[], enabled: boolean): Promise<number> {
+    return this.chats.bulkSetAgentEnabledByIds(ids, enabled);
+  }
+  /**
+   * Apply the auto-exclusion patterns (one per line, case-insensitive contains)
+   * to existing chats: matching names get the agent disabled. Returns count.
+   */
+  applyExcludePatterns(patternsText: string): Promise<number> {
+    const patterns = patternsText
+      .split(/\r?\n/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (patterns.length === 0) return Promise.resolve(0);
+    return this.chats.disableByNamePatterns(patterns);
+  }
   listMessages(filter: MessageListFilter): Promise<MessageView[]> {
     return this.messages.listByChat(filter);
   }

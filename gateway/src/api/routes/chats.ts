@@ -46,6 +46,20 @@ export async function registerChatRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
+  // Bulk over an explicit selection (checkboxes in the UI).
+  app.post<{ Body: { ids?: string[]; agent_enabled?: boolean } }>(
+    "/api/chats/bulk-agent-ids",
+    async (req, reply) => {
+      const { ids, agent_enabled } = req.body ?? {};
+      if (!Array.isArray(ids) || ids.length === 0 || typeof agent_enabled !== "boolean") {
+        reply.status(400);
+        return { error: "ids (string[]) and agent_enabled (boolean) are required" };
+      }
+      const updated = await container.chats.bulkSetAgentByIds(ids, agent_enabled);
+      return { updated };
+    }
+  );
+
   app.get<{ Params: { id: string } }>("/api/chats/:id", async (req, reply) => {
     const chat = await container.chats.get(req.params.id);
     if (!chat) {

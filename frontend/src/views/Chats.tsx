@@ -21,12 +21,17 @@ export function Chats() {
   const [q, setQ] = useState("");
   const [labelFilter, setLabelFilter] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Selección con checkboxes para acciones sobre "marcados" (como telegram-sender).
+  const [marked, setMarked] = useState<Set<string>>(new Set());
 
   const chatsQ = useQuery({
     queryKey: ["chats", { q, label: labelFilter }],
     queryFn: () => api.chats.list({ q: q || undefined, label: labelFilter || undefined }),
   });
   const labelsQ = useQuery({ queryKey: ["labels"], queryFn: api.labels.list });
+  const waQ = useQuery({ queryKey: ["wa"], queryFn: api.wa.status });
+  // Cuenta conectada (dígitos) para marcar chats sincronizados con OTRO número.
+  const meDigits = waQ.data?.me.id?.split("@")[0]?.split(":")[0] ?? null;
 
   const labelOptions = useMemo(
     () => labelsQ.data?.map((l) => l.label) ?? [],
@@ -53,6 +58,17 @@ export function Chats() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const bulkIds = useMutation({
+    mutationFn: (input: { ids: string[]; agent_enabled: boolean }) =>
+      api.chats.bulkAgentIds(input),
+    onSuccess: ({ updated }, { agent_enabled }) => {
+      qc.invalidateQueries({ queryKey: ["chats"] });
+      setMarked(new Set());
+      toast.success(`Agente ${agent_enabled ? "activado" : "desactivado"} en ${updated} marcado(s)`);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const loaded = chatsQ.data?.length ?? 0;
   const filtered = Boolean(q || labelFilter);
   const runBulk = (enabled: boolean) => {
@@ -62,8 +78,30 @@ export function Chats() {
     }
   };
 
+  const toggleMark = (id: string) =>
+    setMarked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const visibleIds = chatsQ.data?.map((c) => c.id) ?? [];
+  const allVisibleMarked = visibleIds.length > 0 && visibleIds.every((id) => marked.has(id));
+  const toggleAllVisible = () =>
+    setMarked((prev) => {
+      if (allVisibleMarked) {
+        const next = new Set(prev);
+        for (const id of visibleIds) next.delete(id);
+        return next;
+      }
+      return new Set([...prev, ...visibleIds]);
+    });
+
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+    <div className="space-y-4">
+      <ExcludePatternsCard />
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Chats ({chatsQ.data?.length ?? 0})</CardTitle>
@@ -89,27 +127,64 @@ export function Chats() {
           </div>
         </CardHeader>
         <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800 px-3 py-2">
-          <span className="text-[11px] text-zinc-500">
-            Acciones masivas {filtered ? "(filtro actual)" : "(todos los chats)"}:
-          </span>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={bulkAgent.isPending || loaded === 0}
-            onClick={() => runBulk(true)}
-            title="Activar el agente para los chats que coinciden con la búsqueda/etiqueta de arriba"
+          <label
+            className="flex items-center gap-1.5 text-[11px] text-zinc-500"
+            title="Marcar/desmarcar todos los visibles"
           >
-            <Power className="h-3.5 w-3.5" /> Activar agente
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={bulkAgent.isPending || loaded === 0}
-            onClick={() => runBulk(false)}
-            title="Desactivar el agente para los chats que coinciden con la búsqueda/etiqueta de arriba"
-          >
-            <PowerOff className="h-3.5 w-3.5" /> Desactivar agente
-          </Button>
+            <input
+              type="checkbox"
+              checked={allVisibleMarked}
+              onChange={toggleAllVisible}
+              className="h-3.5 w-3.5 accent-emerald-500"
+            />
+            {marked.size > 0 ? `${marked.size} marcado(s)` : "Marcar todos"}
+          </label>
+          {marked.size > 0 ? (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={bulkIds.isPending}
+                onClick={() => bulkIds.mutate({ ids: [...marked], agent_enabled: true })}
+                title="Activar el agente en los chats marcados con checkbox"
+              >
+                <Power className="h-3.5 w-3.5" /> Incluir marcados
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={bulkIds.isPending}
+                onClick={() => bulkIds.mutate({ ids: [...marked], agent_enabled: false })}
+                title="Desactivar el agente en los chats marcados con checkbox"
+              >
+                <PowerOff className="h-3.5 w-3.5" /> Excluir marcados
+              </Button>
+            </>
+          ) : (
+            <>
+              <span className="text-[11px] text-zinc-500">
+                · Filtro {filtered ? "actual" : "(todos)"}:
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={bulkAgent.isPending || loaded === 0}
+                onClick={() => runBulk(true)}
+                title="Activar el agente para los chats que coinciden con la búsqueda/etiqueta de arriba"
+              >
+                <Power className="h-3.5 w-3.5" /> Activar agente
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={bulkAgent.isPending || loaded === 0}
+                onClick={() => runBulk(false)}
+                title="Desactivar el agente para los chats que coinciden con la búsqueda/etiqueta de arriba"
+              >
+                <PowerOff className="h-3.5 w-3.5" /> Desactivar agente
+              </Button>
+            </>
+          )}
         </div>
         <CardBody className="max-h-[70vh] overflow-y-auto p-0">
           {chatsQ.data?.length ? (
@@ -120,6 +195,9 @@ export function Chats() {
                   chat={c}
                   labels={labelOptions}
                   selected={selectedId === c.id}
+                  marked={marked.has(c.id)}
+                  meDigits={meDigits}
+                  onToggleMark={() => toggleMark(c.id)}
                   onSelect={() => setSelectedId(c.id)}
                   onPatch={(body) => patchChat.mutate({ id: c.id, body })}
                 />
@@ -132,7 +210,71 @@ export function Chats() {
       </Card>
 
       <ChatDetail chatId={selectedId} />
+      </div>
     </div>
+  );
+}
+
+/**
+ * Auto-exclusión por patrón de nombre (como telegram-sender): un patrón por
+ * línea; cualquier chat cuyo nombre CONTENGA un patrón (sin distinguir
+ * mayúsculas) queda con el agente desactivado — al guardar y a medida que se
+ * sincronizan nombres nuevos. Nunca re-activa solo: usa los checkboxes o el
+ * switch para volver a incluir.
+ */
+function ExcludePatternsCard() {
+  const qc = useQueryClient();
+  const stateQ = useQuery({ queryKey: ["state"], queryFn: api.state.get });
+  const [draft, setDraft] = useState<string | null>(null);
+  const current = stateQ.data?.exclude_patterns ?? "";
+  const value = draft ?? current;
+  const dirty = draft !== null && draft !== current;
+
+  const save = useMutation({
+    mutationFn: (exclude_patterns: string) => api.state.patch({ exclude_patterns }),
+    onSuccess: (next) => {
+      qc.setQueryData(["state"], next);
+      qc.invalidateQueries({ queryKey: ["chats"] });
+      setDraft(null);
+      toast.success(
+        next.excluded && next.excluded > 0
+          ? `Patrones guardados — ${next.excluded} chat(s) auto-excluidos`
+          : "Patrones guardados"
+      );
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">⛔ Auto-excluir por patrón de nombre</CardTitle>
+        <Button
+          size="sm"
+          variant="primary"
+          disabled={!dirty || save.isPending}
+          onClick={() => save.mutate(value)}
+        >
+          Guardar patrones
+        </Button>
+      </CardHeader>
+      <CardBody className="space-y-2">
+        <p className="text-xs text-zinc-500">
+          Un patrón por línea. Cualquier chat cuyo nombre <strong>contenga</strong> un patrón (sin
+          distinguir mayúsculas) queda con el agente <strong>desactivado</strong> — al guardar y
+          automáticamente cuando se sincronizan contactos nuevos. Ej.: <code>FAM</code>,{" "}
+          <code>#</code>, <code>Jefe</code>. Para volver a incluir uno, usa su switch o los
+          checkboxes de abajo.
+        </p>
+        <textarea
+          value={value}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={3}
+          placeholder={"FAM\n#\nProveedor"}
+          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+        />
+      </CardBody>
+    </Card>
   );
 }
 
@@ -140,12 +282,18 @@ function ChatRow({
   chat,
   labels,
   selected,
+  marked,
+  meDigits,
+  onToggleMark,
   onSelect,
   onPatch,
 }: {
   chat: Chat;
   labels: string[];
   selected: boolean;
+  marked: boolean;
+  meDigits: string | null;
+  onToggleMark: () => void;
   onSelect: () => void;
   onPatch: (body: ChatPatchBody) => void;
 }) {
@@ -176,6 +324,14 @@ function ChatRow({
         selected && "bg-zinc-800/30"
       )}
     >
+      <input
+        type="checkbox"
+        checked={marked}
+        onChange={onToggleMark}
+        onClick={(e) => e.stopPropagation()}
+        className="h-3.5 w-3.5 shrink-0 accent-emerald-500"
+        title="Marcar para acciones masivas"
+      />
       <div className="min-w-0 flex-1 basis-full sm:basis-0">
         {editingName ? (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -224,6 +380,14 @@ function ChatRow({
             <span className="text-amber-500/80">sin número</span>
           ) : null}
           <span className="truncate font-mono">{chat.id}</span>
+          {chat.wa_account && meDigits && chat.wa_account !== meDigits ? (
+            <span
+              className="rounded bg-amber-500/15 px-1 text-amber-400"
+              title={`Este chat se sincronizó con otra cuenta (+${chat.wa_account}), no con la conectada ahora`}
+            >
+              otra cuenta ·{chat.wa_account.slice(-4)}
+            </span>
+          ) : null}
         </div>
       </div>
       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>

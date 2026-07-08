@@ -17,7 +17,7 @@ El gateway nunca llama Gemini directamente — siempre vía el AI service. Esto 
 
 El gateway lleva **dos sesiones Baileys** al mismo tiempo:
 - `.wa-session/` (módulo `src/baileys.ts`): la cuenta B, el agente.
-- `.wa-sender-session/` (módulo `src/sender/session.ts`): la cuenta A, para enviar batches de prueba desde el dashboard. Manejada via `/api/sender/*`.
+- `.wa-sender-session/` (módulo `src/sender/session.ts`): la cuenta A, para enviar batches de prueba desde el dashboard. Manejada via `/api/sender/*`. Usa la **misma factory de sesión** que la principal (`getAuthState`, sessionId `sender`): con `WA_AUTH_STORE=dynamo` (Render) persiste en DynamoDB bajo el prefijo `sender::` y sobrevive restarts — el QR de A se escanea una sola vez.
 
 Event bus en `src/events.ts`, mirrors de estado en `src/wa-status.ts` y `src/sender/status.ts`, y ring buffer de actividad en `src/activity.ts` son los puentes entre los hot paths y la SSE: el use case y los servicios publican; la ruta SSE consume y emite al frontend.
 

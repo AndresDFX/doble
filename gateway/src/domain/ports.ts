@@ -53,6 +53,13 @@ export interface ChatRepository {
    * Returns the number of chats updated.
    */
   bulkSetAgentEnabled(filter: ChatBulkFilter, enabled: boolean): Promise<number>;
+  /** Bulk enable/disable the agent for an explicit selection of chat ids (owner skipped). */
+  bulkSetAgentEnabledByIds(ids: string[], enabled: boolean): Promise<number>;
+  /**
+   * Auto-exclusion by name: disable the agent for chats whose name contains any
+   * pattern (case-insensitive). One-way — never re-enables. Returns count updated.
+   */
+  disableByNamePatterns(patterns: string[]): Promise<number>;
   ensureOwnerChat(): Promise<void>;
   /**
    * Persist contact names (batched) onto EXISTING chats only — names attach to

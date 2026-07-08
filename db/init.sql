@@ -29,6 +29,11 @@ CREATE TABLE IF NOT EXISTS chats (
 -- campo sin pisar nunca un nombre 'manual'.
 ALTER TABLE chats ADD COLUMN IF NOT EXISTS name_source TEXT;
 
+-- Cuenta del agente (dígitos del número B) con la que este chat se sincronizó.
+-- Se fija con la primera actividad y NO se sobreescribe: si se re-vincula con otro
+-- número, los chats viejos quedan asociados al número original.
+ALTER TABLE chats ADD COLUMN IF NOT EXISTS wa_account TEXT;
+
 -- Idempotente: init.sql solo corre auto en volumen nuevo; estos ALTER actualizan un postgres_data existente.
 ALTER TABLE chats ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE chats ADD COLUMN IF NOT EXISTS proactive_enabled BOOLEAN NOT NULL DEFAULT FALSE;
@@ -113,6 +118,9 @@ CREATE TABLE IF NOT EXISTS agent_state (
 
 -- Idempotente: actualiza un agent_state existente (init.sql solo corre auto en DB nueva).
 ALTER TABLE agent_state ADD COLUMN IF NOT EXISTS global_prompt TEXT NOT NULL DEFAULT '';
+-- Auto-exclusión por nombre (un patrón por línea, "contiene", sin mayúsculas):
+-- los chats cuyo nombre matchee quedan con el agente desactivado automáticamente.
+ALTER TABLE agent_state ADD COLUMN IF NOT EXISTS exclude_patterns TEXT NOT NULL DEFAULT '';
 
 INSERT INTO agent_state (id, enabled, draft_mode, user_name)
 VALUES (1, TRUE, TRUE, 'Yo')

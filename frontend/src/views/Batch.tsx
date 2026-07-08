@@ -68,6 +68,8 @@ export function Batch() {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <BatchExplainer />
+
       <SenderCard
         status={status}
         onConnect={() => connect.mutate()}
@@ -90,6 +92,35 @@ export function Batch() {
         batch={batch}
         onAbort={() => abort.mutate()}
       />
+    </div>
+  );
+}
+
+function BatchExplainer() {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 lg:col-span-3">
+      <p className="text-sm font-medium text-zinc-200">
+        ¿Por qué esta pestaña pide otro QR?
+      </p>
+      <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-zinc-400">
+        <li>
+          <strong className="text-zinc-300">Batch es una matriz de pruebas:</strong> dispara
+          mensajes <em>desde</em> tu WhatsApp principal (<strong className="text-zinc-300">A</strong>)
+          {" "}<em>hacia</em> el número del agente (<strong className="text-zinc-300">B</strong>),
+          para que el agente responda como si le escribiera un contacto real.
+        </li>
+        <li>
+          <strong className="text-zinc-300">Por eso necesita una conexión propia (A):</strong> la
+          conexión del Dashboard es <strong className="text-zinc-300">B</strong>, el agente.
+          B no puede probarse a sí mismo — sus propios mensajes cuentan como &ldquo;míos&rdquo;
+          (<span className="font-mono">from_me</span>) y el pipeline nunca los responde.
+        </li>
+        <li>
+          <strong className="text-zinc-300">El QR se escanea una sola vez:</strong> la sesión de A
+          se guarda igual que la de B (en producción también sobrevive reinicios).
+          &ldquo;Borrar sesión&rdquo; la elimina, por si quieres vincular otra cuenta A.
+        </li>
+      </ul>
     </div>
   );
 }

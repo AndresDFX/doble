@@ -70,14 +70,20 @@ con Basic Auth).
 | 5.4 | **Búsqueda por número** | *Chats* → buscar "+57 300 123 4567" (con espacios/+) | Encuentra el chat aunque el nombre no coincida (matchea la columna phone) |
 | 5.5 | **Propagación por número** | Contacto con chat `@lid` y `@s.whatsapp.net` (mismo teléfono) | Al identificarse el nombre en uno, el otro chat hereda el nombre |
 | 5.6 | El agente usa el nombre | Chat con nombre asignado: A saluda | El borrador puede dirigirse por ese nombre; en chat SIN nombre, jamás usa nombre alguno |
+| 5.7 | Cuenta de sincronización | Tras actividad en un chat, ver `chats.wa_account` (o el badge) | Guarda los dígitos del número B conectado; si se re-vincula con OTRO número, los chats viejos muestran badge "otra cuenta" y conservan su `wa_account` original |
 
-## 6. Acciones masivas
+## 6. Acciones masivas y listas (selección + exclusión)
 
 | # | Caso | Pasos | Esperado |
 |---|------|-------|----------|
 | 6.1 | Desactivar por etiqueta | *Chats* → filtrar `familia` → "Desactivar agente" → confirmar | Toast "Agente desactivado en N chat(s)"; solo esos chats quedan off |
 | 6.2 | Activar por búsqueda | Buscar por texto o número → "Activar agente" | Solo los que coinciden con el filtro cambian |
-| 6.3 | Owner intocable | Bulk sin filtro | El pseudo-chat `__owner__` nunca cambia |
+| 6.3 | Owner intocable | Bulk sin filtro / por ids incluyendo `__owner__` | El pseudo-chat `__owner__` nunca cambia |
+| 6.4 | Marcados (checkboxes) | Marcar 2-3 chats sueltos → "Excluir marcados" → luego "Incluir marcados" | Solo los marcados cambian; el contador de marcados se resetea tras la acción |
+| 6.5 | Marcar todos los visibles | Filtrar por etiqueta → checkbox "Marcar todos" → excluir | Marca/afecta solo los chats visibles del filtro |
+| 6.6 | Auto-excluir por patrón | Card "⛔ Auto-excluir": escribir `FAM` → Guardar patrones | Toast con N auto-excluidos; todo chat cuyo nombre contenga "fam" (cualquier caso) queda off |
+| 6.7 | Patrón aplica a nombres nuevos | Con patrón `FAM` guardado, que escriba un contacto nuevo cuya agenda diga "Tía FAMILIA" | Al identificarse el nombre, el chat queda auto-excluido (Actividad: "Auto-excluidos N chat(s)") |
+| 6.8 | Exclusión es de una vía | Quitar el patrón y guardar | Los chats excluidos NO se re-activan solos (usar switch/checkboxes para incluir) |
 
 ## 7. Proactivo (turn-aware)
 
@@ -102,7 +108,8 @@ con Basic Auth).
 
 | # | Caso | Pasos | Esperado |
 |---|------|-------|----------|
-| 9.1 | Conectar A | *Batch* → Conectar → escanear QR con A | Sender "open" |
+| 9.1 | Conectar A | *Batch* → Conectar → escanear QR con A | Sender "open"; el explicador de la pestaña aclara por qué A ≠ B |
+| 9.1b | Sesión A persiste | Reiniciar el servicio y volver a *Batch* | El sender reconecta SIN pedir QR (sesión `sender::` en DynamoDB / `.wa-sender-session` local) |
 | 9.2 | Vista previa | Elegir temas + "Vista previa" | Muestra el plan sin enviar |
 | 9.3 | Lote real | 2-3 mensajes, delays por defecto, destino B | Progreso en vivo; B los recibe; el agente genera borradores para cada uno |
 

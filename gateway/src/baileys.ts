@@ -197,6 +197,8 @@ export type ExtractedMessage = {
   text: string | null;
   mediaPath: string | null;
   phone: string | null;
+  /** Agent account (digits) that received this message — ties the chat to the synced number. */
+  account: string | null;
 };
 
 /**
@@ -254,6 +256,7 @@ export async function extractMessage(
     sender_name: msg.pushName ?? null,
     ts,
     phone: phoneFromKey(msg.key),
+    account: digitsFromJid(sock.user?.id),
   };
 
   if (message.conversation) {

@@ -1,24 +1,34 @@
 import {
   default as makeWASocket,
-  useMultiFileAuthState,
   fetchLatestBaileysVersion,
   DisconnectReason,
   type WASocket,
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
-import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
+import { getAuthState } from "../infrastructure/auth-state.js";
 import { bus } from "../events.js";
 import { activity } from "../activity.js";
 import { senderStatus } from "./status.js";
 
+// Where the sender session lives depends on WA_AUTH_STORE (same factory as the
+// main session): `files` → this directory on disk; `dynamo` → items namespaced
+// under `sender::` in WA_AUTH_TABLE, so it survives restarts on ephemeral disks.
 const SENDER_SESSION_DIR = resolve(config.waSessionDir, "..", ".wa-sender-session");
+const SENDER_SESSION_ID = "sender";
 
 let currentSock: WASocket | null = null;
 let reconnecting = false;
 let connectPromise: Promise<void> | null = null;
+
+/**
+ * The latest session's `clearAll` (from getAuthState) — wipes the persisted
+ * sender auth in whichever store is configured (files or DynamoDB). Set on
+ * each startSender(); used by purgeSenderSession().
+ */
+let clearSenderSession: (() => Promise<void>) | null = null;
 
 export function getSenderSessionDir(): string {
   return SENDER_SESSION_DIR;
@@ -36,8 +46,11 @@ export function senderIsOpen(): boolean {
 export async function startSender(): Promise<void> {
   if (connectPromise) return connectPromise;
   connectPromise = (async () => {
-    await mkdir(SENDER_SESSION_DIR, { recursive: true });
-    const { state, saveCreds } = await useMultiFileAuthState(SENDER_SESSION_DIR);
+    const { state, saveCreds, clearAll } = await getAuthState({
+      sessionDir: SENDER_SESSION_DIR,
+      sessionId: SENDER_SESSION_ID,
+    });
+    clearSenderSession = clearAll;
     const { version } = await fetchLatestBaileysVersion();
 
     const makeSock = (): WASocket =>
@@ -89,7 +102,7 @@ export async function startSender(): Promise<void> {
               reconnecting = false;
             }, 1000);
           } else if (code === DisconnectReason.loggedOut || code === 401) {
-            senderStatus.setClose("Sesión rechazada (401). Borra .wa-sender-session y reintenta.");
+            senderStatus.setClose("Sesión rechazada (401). Borra la sesión del sender y reintenta.");
             bus.publish({ type: "sender-status", payload: senderStatus.get() });
             activity.push({
               kind: "sender",
@@ -129,7 +142,14 @@ export async function stopSender(): Promise<void> {
 
 export async function purgeSenderSession(): Promise<void> {
   await stopSender();
-  await rm(SENDER_SESSION_DIR, { recursive: true, force: true });
+  // clearAll() wipes the session in whichever store is active (files or Dynamo).
+  // If the sender never connected in this process there's no handle yet — grab
+  // a fresh one from the factory just to clear.
+  const clearAll =
+    clearSenderSession ??
+    (await getAuthState({ sessionDir: SENDER_SESSION_DIR, sessionId: SENDER_SESSION_ID })).clearAll;
+  await clearAll();
+  clearSenderSession = null;
   activity.push({
     kind: "sender",
     level: "warn",

@@ -75,6 +75,21 @@ async function flush(): Promise<void> {
         level: "info",
         message: `Identificados ${written} contacto(s) por nombre`,
       });
+      // Freshly named chats may now match the owner's auto-exclusion patterns
+      // (e.g. names containing "FAM") — apply them so the agent never replies there.
+      try {
+        const state = await container.agentState.get();
+        const excluded = await container.chats.applyExcludePatterns(state.exclude_patterns);
+        if (excluded > 0) {
+          activity.push({
+            kind: "system",
+            level: "info",
+            message: `Auto-excluidos ${excluded} chat(s) por patrón de nombre`,
+          });
+        }
+      } catch (err) {
+        logger.warn({ err }, "Failed to apply exclusion patterns after name sync");
+      }
     }
   } catch (err) {
     logger.warn({ err }, "Failed to persist contact names — re-queuing");
