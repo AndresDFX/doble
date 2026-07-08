@@ -14,7 +14,7 @@ import {
 } from "../components/ui";
 import { cn } from "../lib/cn";
 import { toast } from "sonner";
-import { Pencil, Check, X, Power, PowerOff } from "lucide-react";
+import { Pencil, Check, X, Power, PowerOff, Trash2 } from "lucide-react";
 
 export function Chats() {
   const qc = useQueryClient();
@@ -76,6 +76,33 @@ export function Chats() {
     if (confirm(`¿${enabled ? "Activar" : "Desactivar"} el agente para ${scope}?`)) {
       bulkAgent.mutate(enabled);
     }
+  };
+
+  const purgeChats = useMutation({
+    mutationFn: (scope: "all" | "other-account") => api.chats.purge(scope),
+    onSuccess: ({ deleted, kept_account }) => {
+      qc.invalidateQueries({ queryKey: ["chats"] });
+      setMarked(new Set());
+      toast.success(
+        kept_account
+          ? `${deleted} chat(s) de otras cuentas borrados (se conservó +${kept_account})`
+          : `${deleted} chat(s) borrados`
+      );
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const runPurge = () => {
+    const opt = prompt(
+      "Borrar chats (mensajes, embeddings y borradores incluidos; las Notas del dueño se conservan).\n\n" +
+        "Escribe:\n" +
+        "  OTRA   → borrar solo chats de OTRAS cuentas (conserva los del número conectado)\n" +
+        "  TODOS  → borrar TODOS los chats\n"
+    );
+    const v = (opt ?? "").trim().toUpperCase();
+    if (v === "TODOS") purgeChats.mutate("all");
+    else if (v === "OTRA") purgeChats.mutate("other-account");
+    else if (opt !== null) toast.warning("Cancelado: escribe OTRA o TODOS");
   };
 
   const toggleMark = (id: string) =>
@@ -185,6 +212,16 @@ export function Chats() {
               </Button>
             </>
           )}
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={purgeChats.isPending}
+            onClick={runPurge}
+            title="Borrar chats (p. ej. los sincronizados con una cuenta anterior). Las Notas del dueño se conservan."
+            className="ml-auto text-red-400 hover:text-red-300"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Borrar chats…
+          </Button>
         </div>
         <CardBody className="max-h-[70vh] overflow-y-auto p-0">
           {chatsQ.data?.length ? (

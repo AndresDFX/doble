@@ -112,6 +112,14 @@ export class ChatService {
     return this.chats.bulkSetAgentEnabledByIds(ids, enabled);
   }
   /**
+   * Delete chats and their data (owner pseudo-chat/notes always survive).
+   * `keepAccount` preserves chats synced under the given agent number — used to
+   * clean out data from a previously linked WhatsApp account. Returns count.
+   */
+  purge(opts: { keepAccount?: string | null }): Promise<number> {
+    return this.chats.purge(opts);
+  }
+  /**
    * Apply the auto-exclusion patterns (one per line, case-insensitive contains)
    * to existing chats: matching names get the agent disabled. Returns count.
    */

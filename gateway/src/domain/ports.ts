@@ -60,6 +60,13 @@ export interface ChatRepository {
    * pattern (case-insensitive). One-way — never re-enables. Returns count updated.
    */
   disableByNamePatterns(patterns: string[]): Promise<number>;
+  /**
+   * Delete chats (messages/embeddings/drafts cascade). The owner pseudo-chat and
+   * its notes always survive. With `keepAccount`, chats synced under that agent
+   * account are kept (used to wipe data from a previously linked number).
+   * Returns the number of chats deleted.
+   */
+  purge(opts: { keepAccount?: string | null }): Promise<number>;
   ensureOwnerChat(): Promise<void>;
   /**
    * Persist contact names (batched) onto EXISTING chats only — names attach to

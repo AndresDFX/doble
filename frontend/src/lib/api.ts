@@ -243,6 +243,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify(body),
       }),
+    purge: (scope: "all" | "other-account") =>
+      http<{ deleted: number; kept_account: string | null }>("/api/chats/purge", {
+        method: "POST",
+        body: JSON.stringify({ scope }),
+      }),
   },
   drafts: {
     list: (status: Draft["status"] = "pending") =>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type CatalogTheme, type SenderStatus, type BatchState } from "../lib/api";
 import {
@@ -38,6 +38,10 @@ export function Batch() {
     queryFn: api.sender.batchState,
     refetchInterval: 3_000,
   });
+  // Conexión PRINCIPAL (el agente B) — para autollenar el destino del lote.
+  const waQ = useQuery({ queryKey: ["wa"], queryFn: api.wa.status });
+  const agentNumber = waQ.data?.me.id?.split("@")[0]?.split(":")[0] ?? null;
+  const agentOpen = waQ.data?.connection === "open";
 
   const connect = useMutation({
     mutationFn: api.sender.connect,
@@ -66,9 +70,17 @@ export function Batch() {
   const status = statusQ.data;
   const batch = batchQ.data;
 
+  const senderOpen = status?.connection === "open";
+  const batchDone = batch?.status === "done";
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      <BatchExplainer />
+      <BatchStepper
+        senderOpen={senderOpen}
+        agentOpen={agentOpen}
+        agentNumber={agentNumber}
+        batchDone={batchDone}
+      />
 
       <SenderCard
         status={status}
@@ -84,8 +96,9 @@ export function Batch() {
 
       <BatchForm
         catalog={catalogQ.data ?? []}
-        senderReady={status?.connection === "open"}
+        senderReady={senderOpen}
         batchRunning={batch?.status === "running"}
+        agentNumber={agentNumber}
       />
 
       <BatchProgress
@@ -96,31 +109,85 @@ export function Batch() {
   );
 }
 
-function BatchExplainer() {
+/**
+ * Guía de uso con estado vivo: qué es Batch, en qué paso vas y qué sigue.
+ * Sustituye al explicador plano — la queja era que la pestaña no se entendía.
+ */
+function BatchStepper({
+  senderOpen,
+  agentOpen,
+  agentNumber,
+  batchDone,
+}: {
+  senderOpen: boolean;
+  agentOpen: boolean;
+  agentNumber: string | null;
+  batchDone: boolean;
+}) {
+  const steps = [
+    {
+      n: 1,
+      title: "Conecta tu WhatsApp personal (A)",
+      done: senderOpen,
+      detail: senderOpen
+        ? "Sender conectado ✓ (la sesión queda guardada; no tendrás que volver a escanear)"
+        : "En la card «Sender» dale a Conectar y escanea el QR con TU WhatsApp de siempre. Es una conexión aparte: la del Dashboard es el agente (B), y B no puede escribirse a sí mismo para probarse.",
+    },
+    {
+      n: 2,
+      title: "Dispara el lote de prueba (A → B)",
+      done: batchDone,
+      detail: agentOpen
+        ? `El destino ya es el número del agente${agentNumber ? ` (+${agentNumber})` : ""}. Elige temas (familia, trabajo…), marca «Vista previa» si solo quieres ver el plan, y dale Enviar.`
+        : "Cuando el agente (Dashboard) esté conectado, el destino se llena solo con su número.",
+    },
+    {
+      n: 3,
+      title: "Mira cómo respondió el agente",
+      done: false,
+      detail:
+        "Cada mensaje del lote llega al agente como si un contacto real le escribiera: genera un borrador por mensaje. Revísalos en la pestaña Borradores (tono por etiqueta, abstenciones «falta contexto») y el detalle técnico en Actividad → filtro Batch. Así calibras prompts y ejemplos.",
+    },
+  ];
+
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 lg:col-span-3">
-      <p className="text-sm font-medium text-zinc-200">
-        ¿Por qué esta pestaña pide otro QR?
-      </p>
-      <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-zinc-400">
-        <li>
-          <strong className="text-zinc-300">Batch es una matriz de pruebas:</strong> dispara
-          mensajes <em>desde</em> tu WhatsApp principal (<strong className="text-zinc-300">A</strong>)
-          {" "}<em>hacia</em> el número del agente (<strong className="text-zinc-300">B</strong>),
-          para que el agente responda como si le escribiera un contacto real.
-        </li>
-        <li>
-          <strong className="text-zinc-300">Por eso necesita una conexión propia (A):</strong> la
-          conexión del Dashboard es <strong className="text-zinc-300">B</strong>, el agente.
-          B no puede probarse a sí mismo — sus propios mensajes cuentan como &ldquo;míos&rdquo;
-          (<span className="font-mono">from_me</span>) y el pipeline nunca los responde.
-        </li>
-        <li>
-          <strong className="text-zinc-300">El QR se escanea una sola vez:</strong> la sesión de A
-          se guarda igual que la de B (en producción también sobrevive reinicios).
-          &ldquo;Borrar sesión&rdquo; la elimina, por si quieres vincular otra cuenta A.
-        </li>
-      </ul>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-medium text-zinc-200">
+          Batch = banco de pruebas del agente
+        </p>
+        <p className="text-[11px] text-zinc-500">
+          Envía mensajes variados desde tu WhatsApp (A) al agente (B) y evalúa sus borradores en lote.
+        </p>
+      </div>
+      <ol className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {steps.map((s) => (
+          <li
+            key={s.n}
+            className={cn(
+              "rounded-lg border p-3",
+              s.done
+                ? "border-emerald-500/40 bg-emerald-500/5"
+                : "border-zinc-800 bg-zinc-950/40"
+            )}
+          >
+            <div className="flex items-center gap-2 text-sm">
+              <span
+                className={cn(
+                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                  s.done ? "bg-emerald-500 text-zinc-950" : "bg-zinc-800 text-zinc-300"
+                )}
+              >
+                {s.done ? "✓" : s.n}
+              </span>
+              <span className={cn("font-medium", s.done ? "text-emerald-200" : "text-zinc-200")}>
+                {s.title}
+              </span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">{s.detail}</p>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
@@ -200,12 +267,21 @@ function BatchForm({
   catalog,
   senderReady,
   batchRunning,
+  agentNumber,
 }: {
   catalog: CatalogTheme[];
   senderReady: boolean;
   batchRunning: boolean;
+  agentNumber: string | null;
 }) {
   const [to, setTo] = useState("");
+  const [toTouched, setToTouched] = useState(false);
+
+  // Autollenar el destino con el número del agente conectado (B) — que es el
+  // destino natural de un lote de prueba. Solo mientras el usuario no lo edite.
+  useEffect(() => {
+    if (!toTouched && agentNumber) setTo(agentNumber);
+  }, [agentNumber, toTouched]);
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
   const [count, setCount] = useState<number | "">("");
   const [minDelay, setMinDelay] = useState(6000);
@@ -250,13 +326,35 @@ function BatchForm({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs text-zinc-400">
-              Destino (WhatsApp B: número o JID)
+              Destino (el agente B — se llena solo al conectar)
             </label>
             <Input
               placeholder="573XXXXXXXXX"
               value={to}
-              onChange={(e) => setTo(e.target.value)}
+              onChange={(e) => {
+                setToTouched(true);
+                setTo(e.target.value);
+              }}
             />
+            {agentNumber && to !== agentNumber ? (
+              <button
+                onClick={() => {
+                  setToTouched(true);
+                  setTo(agentNumber);
+                }}
+                className="mt-1 text-[11px] text-emerald-400 hover:text-emerald-300"
+              >
+                Usar el número del agente (+{agentNumber})
+              </button>
+            ) : agentNumber ? (
+              <p className="mt-1 text-[11px] text-zinc-500">
+                ✓ es el número del agente conectado
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] text-amber-400/80">
+                El agente (Dashboard) no está conectado; escribe el número a mano.
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div>
@@ -418,6 +516,14 @@ function BatchProgress({
             style={{ width: `${pct}%` }}
           />
         </div>
+        {batch.status === "done" ? (
+          <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+            ✅ Lote terminado. Ahora ve a la pestaña <strong>Borradores</strong>: hay un borrador
+            por cada mensaje que el agente decidió responder (y avisos «falta contexto» donde se
+            abstuvo). Ajusta prompts/ejemplos en <strong>Prompts</strong> y repite el lote para
+            comparar.
+          </p>
+        ) : null}
         <p className="text-xs text-zinc-500">
           Sigue el detalle por mensaje en la pestaña <strong>Actividad</strong> (filtro
           <em> Batch</em>).

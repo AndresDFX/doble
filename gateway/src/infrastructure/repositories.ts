@@ -373,6 +373,20 @@ export class PostgresChatRepository implements ChatRepository {
     return rowCount ?? 0;
   }
 
+  async purge(opts: { keepAccount?: string | null }): Promise<number> {
+    // ON DELETE CASCADE wipes messages, embeddings and drafts of each chat; the
+    // owner pseudo-chat (and with it the owner notes) is always preserved.
+    if (opts.keepAccount) {
+      const { rowCount } = await pool.query(
+        `DELETE FROM chats WHERE id <> $1 AND wa_account IS DISTINCT FROM $2`,
+        [OWNER_CHAT_ID, opts.keepAccount]
+      );
+      return rowCount ?? 0;
+    }
+    const { rowCount } = await pool.query(`DELETE FROM chats WHERE id <> $1`, [OWNER_CHAT_ID]);
+    return rowCount ?? 0;
+  }
+
   async ensureOwnerChat(): Promise<void> {
     await pool.query(
       `INSERT INTO chats (id, name, label, agent_enabled)

@@ -4,6 +4,7 @@ import {
   MIN_INTERVAL_MINUTES,
   MAX_INTERVAL_MINUTES,
 } from "../../domain/proactive-policy.js";
+import { waStatus } from "../../wa-status.js";
 
 type ChatPatch = {
   label?: string | null;
@@ -43,6 +44,31 @@ export async function registerChatRoutes(app: FastifyInstance): Promise<void> {
       }
       const updated = await container.chats.bulkSetAgent({ q, label }, agent_enabled);
       return { updated };
+    }
+  );
+
+  // Danger zone: delete chats + their data (owner pseudo-chat/notes survive).
+  // scope "all" wipes every chat; "other-account" keeps only the chats synced
+  // under the CURRENTLY connected agent number (cleans a previous account's data).
+  app.post<{ Body: { scope?: "all" | "other-account" } }>(
+    "/api/chats/purge",
+    async (req, reply) => {
+      const scope = req.body?.scope;
+      if (scope !== "all" && scope !== "other-account") {
+        reply.status(400);
+        return { error: 'scope must be "all" or "other-account"' };
+      }
+      let keepAccount: string | null = null;
+      if (scope === "other-account") {
+        const meId = waStatus.get().me.id;
+        keepAccount = meId?.split("@")[0]?.split(":")[0] ?? null;
+        if (!keepAccount) {
+          reply.status(409);
+          return { error: "WhatsApp is not connected — cannot tell which account to keep" };
+        }
+      }
+      const deleted = await container.chats.purge({ keepAccount });
+      return { deleted, kept_account: keepAccount };
     }
   );
 
