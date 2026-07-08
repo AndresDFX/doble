@@ -118,7 +118,8 @@ con Basic Auth).
 | # | Caso | Pasos | Esperado |
 |---|------|-------|----------|
 | 10.1 | Auto-migrate | Tras cada deploy: logs | `auto-migrate: idempotent schema applied`, sin errores de columnas |
-| 10.2 | Keep-alive | Configurar ping externo a `/api/health` cada 10 min | El servicio no duerme; `wa` se mantiene `open` |
+| 10.2 | Keep-alive (self-ping) | No tocar el servicio por >20 min y pedir `/api/health` | Responde en <3s (no hubo cold start): el self-ping lo mantuvo despierto; en logs, "Keep-alive self-ping started" al arrancar |
+| 10.2b | Keep-alive (respaldo) | GitHub → Actions → workflow `keep-alive` → Run workflow | El job termina verde (HTTP 200); si el servicio dormía, lo despierta |
 | 10.3 | Sobrevivir restart | Manual Deploy → Restart | Reconecta sin QR (sesión DynamoDB); mensajes durante el gap se procesan al volver (persist-only, sin responder viejos) |
 | 10.4 | Cold start | Si duerme: primer request | Tarda ~10-60s y responde; después fluido |
 | 10.5 | Memoria | Render → Metrics tras 24h | Sin OOM (Node+Python en 512MB van justos pero caben) |

@@ -1,0 +1,35 @@
+# Respaldo del keep-alive: despierta el servicio de Render si alguna vez se
+# durmió (crash, suspend manual, gap de deploy). El mecanismo PRINCIPAL es el
+# self-ping del gateway (gateway/src/infrastructure/keep-alive.ts), que evita el
+# sleep mientras el proceso viva; este cron solo cubre el caso "ya se durmió y
+# nadie lo despierta".
+#
+# Notas de GitHub Actions:
+# - El cron NO es puntual (puede atrasarse varios minutos) — irrelevante para un
+#   respaldo: con que pegue de vez en cuando, el servicio despierta y el
+#   self-ping retoma.
+# - GitHub desactiva los schedules tras ~60 días sin actividad en el repo; un
+#   push cualquiera los re-activa.
+name: keep-alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /api/health (despierta el servicio si dormía)
+        run: |
+          # Hasta 3 intentos: un cold start de Render puede tardar >30s en responder.
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 75 https://doble.onrender.com/api/health || echo 000)
+            echo "intento $i -> HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 20
+          done
+          echo "el servicio no respondió 200 tras 3 intentos" >&2
+          exit 1

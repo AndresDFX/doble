@@ -161,18 +161,27 @@ reiniciar relee las credenciales desde DynamoDB y `/api/health` pasa a `wa: open
 > reintenta **una** vez. Ten el teléfono con WhatsApp actualizado y ≤4 dispositivos
 > vinculados.
 
-## 5. Keep-alive (el sleep de Render Free)
+## 5. Keep-alive (el sleep de Render Free) — YA INCLUIDO
 
-Render Free **duerme el servicio a los 15 min de inactividad** → el WebSocket de
-WhatsApp se cae y se pierden mensajes entrantes hasta el siguiente arranque. Para un
-agente *inbound* eso importa (a diferencia de telegram-sender, que solo difunde).
+Render Free **duerme el servicio a los 15 min sin tráfico entrante** → el WebSocket
+de WhatsApp se cae y se pierden mensajes hasta el siguiente arranque. Doble lo
+mitiga en dos capas, **sin configurar nada**:
 
-Mantenlo despierto con un ping externo a `/api/health` (queda fuera del Basic Auth)
-cada <15 min — p. ej. [cron-job.org](https://cron-job.org) o UptimeRobot:
+1. **Self-ping (principal)** — [gateway/src/infrastructure/keep-alive.ts](../gateway/src/infrastructure/keep-alive.ts):
+   el gateway se pinguea a sí mismo por su URL pública cada 10 min; ese request
+   cuenta como tráfico entrante y evita el spin-down mientras el proceso viva.
+   Usa `RENDER_EXTERNAL_URL` (Render la inyecta solo) — en local no hay URL y es
+   no-op. Ajustes: `KEEP_ALIVE=off` lo apaga, `KEEP_ALIVE_URL` fuerza otra URL,
+   `KEEP_ALIVE_INTERVAL_MS` cambia la cadencia.
+2. **Cron de respaldo (GitHub Actions)** — [.github/workflows/keep-alive.yml](../.github/workflows/keep-alive.yml):
+   cada ~10 min pega a `/api/health` y **despierta** el servicio si se durmió por
+   un crash/suspend/gap de deploy. El cron de Actions tiene jitter (minutos) —
+   irrelevante para un respaldo. GitHub desactiva schedules tras ~60 días sin
+   pushes; cualquier push los re-activa.
 
-```
-GET https://doble.onrender.com/api/health   cada 10 min
-```
+`/api/health` queda fuera del Basic Auth a propósito para esto. Si quieres una
+tercera capa con alertas (email cuando el servicio caiga), añade un monitor
+gratuito de UptimeRobot a la misma URL — opcional.
 
 > Aun con keep-alive, Render recicla instancias y los redeploys cortan el socket;
 > se recupera solo gracias a DynamoDB, pero con baches. Si quieres **always-on de

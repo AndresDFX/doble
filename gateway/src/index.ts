@@ -7,6 +7,7 @@ import { startApiServer } from "./api/server.js";
 import { container } from "./composition/container.js";
 import { startProactiveScheduler } from "./application/proactive-messenger.js";
 import { applySchema } from "./infrastructure/migrate.js";
+import { startKeepAlive } from "./infrastructure/keep-alive.js";
 
 async function main() {
   logger.info("Doble gateway starting");
@@ -38,6 +39,11 @@ async function main() {
     startProactiveScheduler(container.proactive, logger, { tickMs: config.proactiveTickMs });
   } else {
     logger.info("Proactive scheduler disabled (PROACTIVE_SCHEDULER=off)");
+  }
+
+  // Anti-sleep en free tier: auto-ping por la URL pública (no-op sin URL, p. ej. local).
+  if (config.keepAliveUrl) {
+    startKeepAlive(logger, { url: config.keepAliveUrl, intervalMs: config.keepAliveIntervalMs });
   }
 }
 

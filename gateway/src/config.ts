@@ -62,4 +62,15 @@ export const config = {
   // disable; DB_INIT_SQL overrides the path to the schema file.
   autoMigrate: (process.env.AUTO_MIGRATE ?? "on") !== "off",
   initSqlPath: process.env.DB_INIT_SQL ?? "",
+
+  // Keep-alive (Render Free duerme a los 15 min sin tráfico ENTRANTE): el gateway
+  // se auto-pinguea por su URL pública — ese request cuenta como tráfico entrante
+  // y evita el spin-down mientras el proceso viva. Render inyecta
+  // RENDER_EXTERNAL_URL, así que en Render queda activo sin configurar nada;
+  // KEEP_ALIVE_URL lo sobreescribe y KEEP_ALIVE=off lo apaga. Local: sin URL, no-op.
+  keepAliveUrl:
+    (process.env.KEEP_ALIVE ?? "on") === "off"
+      ? ""
+      : (process.env.KEEP_ALIVE_URL ?? process.env.RENDER_EXTERNAL_URL ?? ""),
+  keepAliveIntervalMs: Number(process.env.KEEP_ALIVE_INTERVAL_MS ?? 600000), // 10 min
 };
